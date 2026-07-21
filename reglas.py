@@ -6,30 +6,46 @@ transformarse en una notificación para el usuario final.
 from __future__ import annotations
 
 
-def evaluar_umbrales(comuna: str, datos: dict, umbrales: dict) -> list[dict]:
+def evaluar_umbrales(comuna: str, datos: dict, umbrales: dict, usar_pronostico_viento: bool = False) -> list[dict]:
     """
     Compara los datos crudos de una comuna contra sus umbrales.
     Devuelve una lista de alertas propias generadas (puede ser vacía).
+
+    `usar_pronostico_viento`: si es True, el viento sostenido y las
+    ráfagas se comparan contra el PEOR valor pronosticado hacia adelante
+    (`viento_max_prevista_kmh` / `rafagas_max_prevista_kmh`) en vez del
+    dato instantáneo del momento — así el reporte por correo (que solo se
+    arma unas pocas veces al día) no se pierde un pico de viento que
+    ocurrió entre un envío y el siguiente. El dashboard en vivo (`api.py`)
+    sigue usando el dato actual por defecto (False), porque ahí sí tiene
+    sentido mostrar la condición del momento.
     """
     alertas = []
 
-    viento = datos.get("viento_kmh")
+    if usar_pronostico_viento:
+        viento = datos.get("viento_max_prevista_kmh")
+        rafagas = datos.get("rafagas_max_prevista_kmh")
+        etiqueta_viento, etiqueta_rafagas = "Viento sostenido previsto", "Ráfagas de viento previstas"
+    else:
+        viento = datos.get("viento_kmh")
+        rafagas = datos.get("rafagas_kmh")
+        etiqueta_viento, etiqueta_rafagas = "Viento sostenido", "Ráfagas de viento"
+
     if viento is not None and viento >= umbrales["viento_kmh"]:
         alertas.append({
             "comuna": comuna,
             "tipo": "viento",
             "nivel": "propia",
-            "mensaje": f"Viento sostenido de {viento} km/h en {comuna} "
+            "mensaje": f"{etiqueta_viento} de {viento} km/h en {comuna} "
                        f"(umbral: {umbrales['viento_kmh']} km/h).",
         })
 
-    rafagas = datos.get("rafagas_kmh")
     if rafagas is not None and rafagas >= umbrales["rafagas_kmh"]:
         alertas.append({
             "comuna": comuna,
             "tipo": "rafagas",
             "nivel": "propia",
-            "mensaje": f"Ráfagas de viento de {rafagas} km/h en {comuna} "
+            "mensaje": f"{etiqueta_rafagas} de {rafagas} km/h en {comuna} "
                        f"(umbral: {umbrales['rafagas_kmh']} km/h).",
         })
 
