@@ -12,6 +12,7 @@ un scheduler tipo APScheduler embebido).
 from __future__ import annotations
 import logging
 import os
+import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from config import REGIONES, PUNTOS_ESPECIFICOS, obtener_umbrales_punto
@@ -31,16 +32,21 @@ MAX_HILOS = 12
 
 
 def _lista_desde_env(var: str, default: list[str]) -> list[str]:
-    """Lee una lista separada por comas desde una variable de entorno
-    (ej. DESTINATARIOS_EMAIL="a@x.cl,b@x.cl"). Si no está definida, usa
-    el valor por defecto codificado abajo. Así el mismo main.py sirve
-    tanto para correr localmente (edita el default) como en GitHub
-    Actions (define el secret DESTINATARIOS_EMAIL / DESTINATARIOS_WHATSAPP).
+    """
+    Lee una lista de valores (correos, números) desde una variable de
+    entorno, tolerando cualquier separador razonable: comas, saltos de
+    línea, o punto y coma — y cualquier mezcla de ellos. Así, si alguien
+    pega los correos uno debajo del otro en vez de separarlos por coma
+    en GitHub Secrets, igual funciona (antes esto rompía el envío con un
+    error de "folded header contains newline").
+
+    Si la variable no está definida, usa el valor por defecto de abajo.
     """
     valor = os.environ.get(var)
     if valor is None:
         return default
-    return [x.strip() for x in valor.split(",") if x.strip()]
+    partes = re.split(r"[,;\n]+", valor)
+    return [p.strip() for p in partes if p.strip()]
 
 
 # Configura aquí el default para correr localmente, o define las variables
