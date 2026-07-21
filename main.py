@@ -14,11 +14,13 @@ import logging
 import os
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from config import REGIONES, PUNTOS_ESPECIFICOS, obtener_umbrales_punto
 from fuentes import fetch_datos_consenso, fetch_alertas_senapred
 from reglas import evaluar_umbrales, formatear_alertas_oficiales
-from estado import ya_fue_enviada, marcar_enviada
+from reporte import generar_asunto, generar_cuerpo_texto, generar_cuerpo_html
 from notificadores import enviar_email, enviar_whatsapp
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -29,6 +31,13 @@ log = logging.getLogger("alertas-meteo-sur")
 # 10 minutos de límite de GitHub Actions. En paralelo baja a segundos,
 # porque las llamadas son de red (I/O), no de CPU.
 MAX_HILOS = 12
+
+# Horas del día (hora de Chile) en las que se ARMA Y ENVÍA el reporte por
+# correo. El chequeo de datos (recolectar_alertas) sigue corriendo cada vez
+# que el workflow se dispara (ej. cada 30 min, ver .github/workflows/alertas.yml),
+# pero el envío del correo solo ocurre en estas horas — así no se manda un
+# correo cada 30 min, sino un reporte a horarios fijos.
+HORAS_ENVIO = [8, 14, 20]
 
 
 def _lista_desde_env(var: str, default: list[str]) -> list[str]:
@@ -97,51 +106,62 @@ def recolectar_alertas() -> list[dict]:
     return todas_las_alertas
 
 
+def es_hora_de_enviar(ahora: datetime) -> bool:
+    """
+    True solo dentro de los primeros 30 minutos de una hora programada
+    (ej. 8:00–8:29). Como el workflow corre cada 30 min, esto asegura que
+    el reporte se envíe UNA vez por horario, no dos (una a la hora en
+    punto y otra a la media hora).
+    """
+    return ahora.hour in HORAS_ENVIO and ahora.minute < 30
+
+
 def notificar(alertas: list[dict]) -> None:
     """
-    Agrupa TODAS las alertas nuevas de este ciclo en un solo correo
-    (evita mandar un email separado por cada una, que con 60+ puntos
-    puede significar decenas de correos de golpe en la primera corrida).
+    Arma y envía el REPORTE COMPLETO del estado actual (no solo lo "nuevo"):
+    todas las alertas activas ahora mismo, agrupadas por severidad, o el
+    mensaje de "sin novedades" si no hay ninguna. Solo se envía si estamos
+    dentro de uno de los HORAS_ENVIO — fuera de esos horarios, no se manda
+    nada (el chequeo de datos igual corre, solo el envío queda pausado).
     """
-    nuevas = []
-    for alerta in alertas:
-        # Clave única para no repetir la misma alerta en ciclos futuros.
-        clave = f"{alerta.get('comuna') or alerta.get('region')}-{alerta['tipo']}-{alerta['nivel']}"
-        if ya_fue_enviada(clave):
-            continue
-        nuevas.append((clave, alerta))
+    ahora = datetime.now(ZoneInfo("America/Santiago"))
 
-    if not nuevas:
-        log.info("Sin alertas nuevas en este ciclo.")
+    if not es_hora_de_enviar(ahora):
+        log.info(
+            "Son las %s (Chile) — fuera de los horarios de envío (%s). No se manda correo.",
+            ahora.strftime("%H:%M"), HORAS_ENVIO,
+        )
         return
 
-    log.info("Se encontraron %d alertas nuevas. Enviando en un solo correo.", len(nuevas))
+    log.info("Horario de envío (%s). Armando reporte con %d alerta(s) activa(s).",
+              ahora.strftime("%H:%M"), len(alertas))
 
-    cuerpo = "\n\n".join(f"- {alerta['mensaje']}" for _, alerta in nuevas)
-    asunto = f"Alertas meteorológicas — {len(nuevas)} nueva(s)"
+    asunto = generar_asunto(alertas)
+    cuerpo_texto = generar_cuerpo_texto(alertas, ahora)
+    cuerpo_html = generar_cuerpo_html(alertas, ahora)
 
     try:
-        enviar_email(DESTINATARIOS_EMAIL, asunto=asunto, cuerpo=cuerpo)
+        enviar_email(DESTINATARIOS_EMAIL, asunto=asunto, cuerpo=cuerpo_texto, cuerpo_html=cuerpo_html)
 
         if DESTINATARIOS_WHATSAPP:
             # WhatsApp usa una plantilla de 3 variables (nivel/zona/descripción),
-            # no lista libre. Para no mandar una plantilla por cada alerta,
-            # se manda UNA sola indicando el total y remitiendo al correo/dashboard.
-            if len(nuevas) == 1:
-                enviar_whatsapp(DESTINATARIOS_WHATSAPP, nuevas[0][1])
+            # no un reporte largo. Se manda un resumen corto, remitiendo al correo.
+            if not alertas:
+                resumen = {"color": "verde", "comuna": "Todos los centros", "mensaje": "Sin novedades."}
+            elif len(alertas) == 1:
+                resumen = alertas[0]
             else:
                 resumen = {
                     "color": "amarilla",
-                    "comuna": f"{len(nuevas)} ubicaciones",
+                    "comuna": f"{len(alertas)} ubicaciones",
                     "mensaje": "Revisa tu correo o el dashboard para el detalle.",
                 }
-                enviar_whatsapp(DESTINATARIOS_WHATSAPP, resumen)
+            enviar_whatsapp(DESTINATARIOS_WHATSAPP, resumen)
 
-        for clave, _ in nuevas:
-            marcar_enviada(clave)
+        log.info("Reporte enviado correctamente.")
 
     except Exception:
-        log.exception("Error enviando notificaciones (no se marcó ninguna como enviada; se reintentará)")
+        log.exception("Error enviando el reporte de alertas")
 
 
 def main():
