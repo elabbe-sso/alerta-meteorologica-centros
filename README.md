@@ -29,7 +29,7 @@ cuando corresponde. Incluye además una app web de monitoreo en vivo.
   - Tormenta eléctrica: código de clima 95/96/99 detectado ahora o en las próximas 6 horas
 - **Notificación por email — reporte en horarios fijos**: el chequeo de datos
   corre cada vez que el workflow se dispara (cada 30 min), pero el correo
-  solo se **arma y envía a las 8:00, 14:00 y 20:00** (hora de Chile,
+  solo se **arma y envía a las 7:30, 14:00 y 19:00** (hora de Chile,
   configurable en `HORAS_ENVIO` de `main.py`). Cada envío es un **reporte
   completo del estado actual** — no solo lo "nuevo" — agrupado por
   severidad (rojas / amarillas / informativas). Si no hay ninguna alerta
@@ -158,3 +158,4 @@ actualmente no influyen en ninguna alerta ni notificación:
   SVIP bloquean explícitamente el acceso automatizado (`robots.txt`). En su
   lugar, `app.html` tiene un botón "⚓ Estados de Puerto" que enlaza
   directamente al sitio oficial para revisarlo manualmente.
+  
