@@ -68,14 +68,34 @@ DESTINATARIOS_EMAIL = _lista_desde_env("DESTINATARIOS_EMAIL", ["destinatario@eje
 DESTINATARIOS_WHATSAPP = _lista_desde_env("DESTINATARIOS_WHATSAPP", [])
 
 
-def _evaluar_punto(punto: tuple) -> list[dict]:
+def horas_hasta_proximo_envio(ahora: datetime) -> int:
+    """
+    Cuántas horas faltan (redondeado hacia arriba) hasta el PRÓXIMO horario
+    de HORAS_ENVIO, mirando también al día siguiente si ya pasaron todos
+    los de hoy. Mínimo 1 hora, para no pedir una ventana de 0 horas justo
+    en el instante del envío.
+    """
+    minutos_ahora = ahora.hour * 60 + ahora.minute
+    objetivos_hoy = sorted(h * 60 + m for h, m in HORAS_ENVIO)
+    siguiente = next((obj for obj in objetivos_hoy if obj > minutos_ahora), None)
+    if siguiente is None:
+        siguiente = objetivos_hoy[0] + 24 * 60  # el primero de mañana
+    minutos_faltantes = siguiente - minutos_ahora
+    return max(1, -(-minutos_faltantes // 60))  # redondeo hacia arriba
+
+
+def _evaluar_punto(punto: tuple, horas_viento: int) -> list[dict]:
     """Procesa UN punto: trae sus datos y los compara contra sus umbrales.
-    Se ejecuta en paralelo para los 68 puntos (ver MAX_HILOS)."""
+    Se ejecuta en paralelo para los 68 puntos (ver MAX_HILOS).
+    El viento/ráfaga se compara contra el PEOR valor pronosticado hasta el
+    próximo envío (`horas_viento`), no el dato del instante — así el
+    reporte no se pierde un pico de viento entre un correo y el siguiente.
+    """
     nombre, lat, lon, comuna_ref, region = punto
     try:
-        datos = fetch_datos_consenso(lat, lon)
+        datos = fetch_datos_consenso(lat, lon, horas_viento)
         umbrales = obtener_umbrales_punto(nombre)
-        return evaluar_umbrales(nombre, datos, umbrales)
+        return evaluar_umbrales(nombre, datos, umbrales, usar_pronostico_viento=True)
     except Exception:
         log.exception("Error obteniendo datos de Open-Meteo para %s", nombre)
         return []
@@ -96,11 +116,16 @@ def recolectar_alertas() -> list[dict]:
     #     except Exception:
     #         log.exception("Error obteniendo alertas SENAPRED para %s", region)
 
+    # Ventana de viento/ráfaga: desde ahora hasta el próximo envío programado.
+    ahora = datetime.now(ZoneInfo("America/Santiago"))
+    horas_viento = horas_hasta_proximo_envio(ahora)
+    log.info("Ventana de viento/ráfaga previstos: próximas %d hora(s) (hasta el siguiente envío).", horas_viento)
+
     # --- Umbrales propios por PUNTO ESPECÍFICO (coordenadas exactas) ---
     # Se consultan EN PARALELO (antes era secuencial, uno por uno, lo que
     # con 68 puntos superaba el límite de tiempo del workflow).
     with ThreadPoolExecutor(max_workers=MAX_HILOS) as executor:
-        futuros = {executor.submit(_evaluar_punto, p): p[0] for p in PUNTOS_ESPECIFICOS}
+        futuros = {executor.submit(_evaluar_punto, p, horas_viento): p[0] for p in PUNTOS_ESPECIFICOS}
         for futuro in as_completed(futuros):
             todas_las_alertas += futuro.result()
 
@@ -183,4 +208,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
