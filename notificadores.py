@@ -21,6 +21,7 @@ import os
 import smtplib
 import requests
 from email.mime.text import MIMEText
+from email.utils import formataddr
 
 
 # ======================================================================
@@ -31,10 +32,13 @@ def enviar_email(destinatarios: list[str], asunto: str, cuerpo: str) -> None:
     smtp_port = int(os.environ.get("SMTP_PORT", "587"))
     smtp_user = os.environ["SMTP_USER"]
     smtp_pass = os.environ["SMTP_PASS"]
+    # Nombre visible del remitente (opcional). Si no se define, se usa solo
+    # el correo, como antes. Ej: SMTP_FROM_NAME="Alertas Centros de Cultivo"
+    smtp_from_name = os.environ.get("SMTP_FROM_NAME", "").strip()
 
     msg = MIMEText(cuerpo, "plain", "utf-8")
     msg["Subject"] = asunto
-    msg["From"] = smtp_user
+    msg["From"] = formataddr((smtp_from_name, smtp_user)) if smtp_from_name else smtp_user
     msg["To"] = ", ".join(destinatarios)
 
     with smtplib.SMTP(smtp_host, smtp_port) as server:
