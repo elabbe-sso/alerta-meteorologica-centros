@@ -57,6 +57,14 @@ UMBRALES_DEFAULT = {
 # override por nombre para puntos específicos (ver obtener_umbrales_punto).
 UMBRALES_POR_COMUNA = {}
 
+# Override de umbrales POR REGIÓN completa. Se aplica a todos los puntos
+# de esa región, antes del override individual por nombre (que sigue
+# pudiendo pisar esto para un punto puntual si hace falta). Los Lagos y
+# Aysén no necesitan entrada acá porque ya usan el default (-3°C).
+UMBRALES_POR_REGION = {
+    "Magallanes": {"temp_min_c": -5},  # heladas más severas y frecuentes en el extremo sur
+}
+
 
 def obtener_umbrales(comuna: str) -> dict:
     """Devuelve los umbrales aplicables a una comuna, aplicando overrides."""
@@ -151,11 +159,18 @@ def obtener_umbrales_punto(nombre_punto: str) -> dict:
     Umbrales para un punto específico (ej. centro de cultivo): NO hereda
     el umbral de ninguna comuna cercana, porque la comuna más cercana no
     es representativa de las condiciones marinas exactas en ese punto.
-    Parte del umbral global por defecto y aplica un override propio solo
-    si existe uno con el nombre exacto del punto en UMBRALES_POR_COMUNA
-    (mismo diccionario, reutilizado como "umbrales por nombre").
+
+    Orden de aplicación (cada uno pisa al anterior si corresponde):
+      1. UMBRALES_DEFAULT (global)
+      2. UMBRALES_POR_REGION (según la región real del punto)
+      3. UMBRALES_POR_COMUNA (override puntual por nombre exacto del punto)
     """
     umbrales = UMBRALES_DEFAULT.copy()
+
+    region = next((p[4] for p in PUNTOS_ESPECIFICOS if p[0] == nombre_punto), None)
+    if region:
+        umbrales.update(UMBRALES_POR_REGION.get(region, {}))
+
     umbrales.update(UMBRALES_POR_COMUNA.get(nombre_punto, {}))
     return umbrales
 
@@ -178,4 +193,3 @@ def validar_comunas_de_puntos() -> list[str]:
                 f"COMUNAS_POR_REGION['{region}']"
             )
     return problemas
-
