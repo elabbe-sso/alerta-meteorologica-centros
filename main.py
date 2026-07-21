@@ -32,12 +32,13 @@ log = logging.getLogger("alertas-meteo-sur")
 # porque las llamadas son de red (I/O), no de CPU.
 MAX_HILOS = 12
 
-# Horas del día (hora de Chile) en las que se ARMA Y ENVÍA el reporte por
-# correo. El chequeo de datos (recolectar_alertas) sigue corriendo cada vez
-# que el workflow se dispara (ej. cada 30 min, ver .github/workflows/alertas.yml),
-# pero el envío del correo solo ocurre en estas horas — así no se manda un
-# correo cada 30 min, sino un reporte a horarios fijos.
-HORAS_ENVIO = [8, 14, 20]
+# Horarios del día (hora de Chile) en los que se ARMA Y ENVÍA el reporte por
+# correo. Cada uno es (hora, minuto). El chequeo de datos (recolectar_alertas)
+# sigue corriendo cada vez que el workflow se dispara (cada 30 min, ver
+# .github/workflows/alertas.yml), pero el envío del correo solo ocurre en
+# estos horarios — así no se manda un correo cada 30 min, sino un reporte
+# a horarios fijos.
+HORAS_ENVIO = [(7, 30), (14, 0), (19, 0)]
 
 
 def _lista_desde_env(var: str, default: list[str]) -> list[str]:
@@ -108,12 +109,19 @@ def recolectar_alertas() -> list[dict]:
 
 def es_hora_de_enviar(ahora: datetime) -> bool:
     """
-    True solo dentro de los primeros 30 minutos de una hora programada
-    (ej. 8:00–8:29). Como el workflow corre cada 30 min, esto asegura que
-    el reporte se envíe UNA vez por horario, no dos (una a la hora en
-    punto y otra a la media hora).
+    True si estamos dentro de los 15 minutos SIGUIENTES a uno de los
+    horarios programados (ej. si el horario es 7:30, dispara entre 7:30 y
+    7:44). Ese margen es porque GitHub Actions no garantiza el minuto
+    exacto de un cron — puede atrasarse unos minutos. 15 min alcanza para
+    absorber ese atraso sin traslaparse con el siguiente chequeo (cada 30
+    min), así el reporte se envía una sola vez por horario.
     """
-    return ahora.hour in HORAS_ENVIO and ahora.minute < 30
+    minutos_ahora = ahora.hour * 60 + ahora.minute
+    for hora, minuto in HORAS_ENVIO:
+        objetivo = hora * 60 + minuto
+        if 0 <= (minutos_ahora - objetivo) < 15:
+            return True
+    return False
 
 
 def notificar(alertas: list[dict]) -> None:
@@ -127,9 +135,10 @@ def notificar(alertas: list[dict]) -> None:
     ahora = datetime.now(ZoneInfo("America/Santiago"))
 
     if not es_hora_de_enviar(ahora):
+        horarios_legibles = ", ".join(f"{h:02d}:{m:02d}" for h, m in HORAS_ENVIO)
         log.info(
             "Son las %s (Chile) — fuera de los horarios de envío (%s). No se manda correo.",
-            ahora.strftime("%H:%M"), HORAS_ENVIO,
+            ahora.strftime("%H:%M"), horarios_legibles,
         )
         return
 
@@ -174,3 +183,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    
