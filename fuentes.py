@@ -41,34 +41,42 @@ from datetime import datetime, timedelta, timezone
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
 
 
-def _min_prevista(horas_iso: list[str], temperaturas: list) -> float | None:
+def _extremo_prevista(horas_iso: list[str], valores: list, horas_ventana: int, agregador) -> float | None:
     """
-    Mínima pronosticada SOLO entre las horas que faltan (desde ahora hacia
-    adelante, hasta 12h), nunca incluyendo horas ya pasadas. Así, cuando el
-    frío del día ya ocurrió y no se pronostica que continúe, el valor deja
-    de bajar del umbral y la alerta de helada se cae sola en el próximo
-    ciclo — no queda "pegada" todo el día por un mínimo que ya pasó.
+    Aplica `agregador` (min o max) SOLO entre las horas que faltan (desde
+    ahora hacia adelante, hasta `horas_ventana` horas), nunca incluyendo
+    horas ya pasadas. Se usa tanto para la mínima de helada (agregador=min)
+    como para el máximo de viento/ráfaga (agregador=max) — en ambos casos,
+    si la condición ya pasó y no se pronostica que continúe, deja de
+    contar, y la alerta se cae sola en el próximo ciclo.
     """
-    if not horas_iso or not temperaturas:
+    if not horas_iso or not valores:
         return None
     ahora = datetime.now()
     idx = next((i for i, h in enumerate(horas_iso) if datetime.fromisoformat(h) >= ahora), None)
     if idx is None:
         return None
-    ventana = [t for t in temperaturas[idx:idx + 12] if t is not None]
-    return min(ventana) if ventana else None
+    ventana = [v for v in valores[idx:idx + horas_ventana] if v is not None]
+    return agregador(ventana) if ventana else None
 
 
-def fetch_datos_open_meteo(lat: float, lon: float) -> dict:
+# Ventana fija para la helada (no depende del horario de notificación).
+HORAS_VENTANA_HELADA = 12
+
+
+def fetch_datos_open_meteo(lat: float, lon: float, horas_viento: int = 12) -> dict:
     """
     Consulta condiciones actuales + acumulados recientes para un punto.
+    `horas_viento`: cuántas horas hacia adelante mirar para el PEOR viento/
+    ráfaga previsto (normalmente, las horas que faltan hasta el próximo
+    envío programado — ver HORAS_ENVIO en main.py).
     Devuelve un dict normalizado que usa el motor de reglas.
     """
     params = {
         "latitude": lat,
         "longitude": lon,
         "current": "temperature_2m,wind_speed_10m,wind_gusts_10m,snowfall",
-        "hourly": "precipitation,snowfall,temperature_2m",
+        "hourly": "precipitation,snowfall,temperature_2m,wind_speed_10m,wind_gusts_10m",
         "timezone": "America/Santiago",
         "forecast_days": 2,
         "past_days": 1,
@@ -94,9 +102,11 @@ def fetch_datos_open_meteo(lat: float, lon: float) -> dict:
         "fuente": "open-meteo",
         "timestamp": current.get("time"),
         "temp_actual_c": current.get("temperature_2m"),
-        "temp_min_prevista_c": _min_prevista(horas, hourly.get("temperature_2m", [])),
+        "temp_min_prevista_c": _extremo_prevista(horas, hourly.get("temperature_2m", []), HORAS_VENTANA_HELADA, min),
         "viento_kmh": current.get("wind_speed_10m"),
         "rafagas_kmh": current.get("wind_gusts_10m"),
+        "viento_max_prevista_kmh": _extremo_prevista(horas, hourly.get("wind_speed_10m", []), horas_viento, max),
+        "rafagas_max_prevista_kmh": _extremo_prevista(horas, hourly.get("wind_gusts_10m", []), horas_viento, max),
         "precipitacion_24h_mm": round(precip_24h, 1),
         "nieve_cm_24h": round(nieve_24h * 100, 1),  # open-meteo entrega cm ya, se deja explícito
     }
@@ -125,7 +135,7 @@ YR_USER_AGENT = "AlertasMeteoSur/1.0 contacto@tu-dominio.cl"
 _yr_cache: dict = {}  # cache simple {(lat,lon): (expires_epoch, resultado)}
 
 
-def fetch_datos_yr(lat: float, lon: float) -> dict | None:
+def fetch_datos_yr(lat: float, lon: float, horas_viento: int = 12) -> dict | None:
     import time
     from email.utils import parsedate_to_datetime
 
@@ -174,6 +184,19 @@ def fetch_datos_yr(lat: float, lon: float) -> dict | None:
     temps_futuras = [t for t in temps_futuras if t is not None]
     temp_min_prevista = min(temps_futuras) if temps_futuras else None
 
+    # Peor viento/ráfaga pronosticado en las próximas `horas_viento` (yr.no
+    # ya solo entrega futuro, así que serie[:horas_viento] son horas por venir).
+    vientos_futuros = []
+    rafagas_futuras = []
+    for p in serie[:horas_viento]:
+        det = p.get("data", {}).get("instant", {}).get("details", {})
+        if det.get("wind_speed") is not None:
+            vientos_futuros.append(det["wind_speed"] * 3.6)
+        if det.get("wind_speed_of_gust") is not None:
+            rafagas_futuras.append(det["wind_speed_of_gust"] * 3.6)
+    viento_max_prevista = round(max(vientos_futuros), 1) if vientos_futuros else None
+    rafaga_max_prevista = round(max(rafagas_futuras), 1) if rafagas_futuras else None
+
     resultado = {
         "fuente": "yr.no",
         "timestamp": ahora.get("time"),
@@ -181,6 +204,8 @@ def fetch_datos_yr(lat: float, lon: float) -> dict | None:
         "temp_min_prevista_c": temp_min_prevista,
         "viento_kmh": viento_kmh,
         "rafagas_kmh": rafaga_kmh,
+        "viento_max_prevista_kmh": viento_max_prevista,
+        "rafagas_max_prevista_kmh": rafaga_max_prevista,
         "precipitacion_24h_mm": round(precip_24h, 1),
         "nieve_cm_24h": None,  # yr.no no separa nieve en el compact/complete estándar
     }
@@ -207,12 +232,12 @@ def fetch_datos_yr(lat: float, lon: float) -> dict | None:
 # sumar una tercera fuente genuinamente independiente al consenso.
 # Mismo endpoint, mismo formato de respuesta, solo cambia &models=.
 # ======================================================================
-def fetch_datos_open_meteo_icon(lat: float, lon: float) -> dict:
+def fetch_datos_open_meteo_icon(lat: float, lon: float, horas_viento: int = 12) -> dict:
     params = {
         "latitude": lat,
         "longitude": lon,
         "current": "temperature_2m,wind_speed_10m,wind_gusts_10m,snowfall",
-        "hourly": "precipitation,snowfall,temperature_2m",
+        "hourly": "precipitation,snowfall,temperature_2m,wind_speed_10m,wind_gusts_10m",
         "timezone": "America/Santiago",
         "forecast_days": 2,
         "past_days": 1,
@@ -236,9 +261,11 @@ def fetch_datos_open_meteo_icon(lat: float, lon: float) -> dict:
         "fuente": "dwd-icon",
         "timestamp": current.get("time"),
         "temp_actual_c": current.get("temperature_2m"),
-        "temp_min_prevista_c": _min_prevista(horas, hourly.get("temperature_2m", [])),
+        "temp_min_prevista_c": _extremo_prevista(horas, hourly.get("temperature_2m", []), HORAS_VENTANA_HELADA, min),
         "viento_kmh": current.get("wind_speed_10m"),
         "rafagas_kmh": current.get("wind_gusts_10m"),
+        "viento_max_prevista_kmh": _extremo_prevista(horas, hourly.get("wind_speed_10m", []), horas_viento, max),
+        "rafagas_max_prevista_kmh": _extremo_prevista(horas, hourly.get("wind_gusts_10m", []), horas_viento, max),
         "precipitacion_24h_mm": round(precip_24h, 1),
         "nieve_cm_24h": round(nieve_24h * 100, 1),
     }
@@ -290,11 +317,16 @@ def fetch_datos_marino(lat: float, lon: float) -> dict:
 # Si prefieres promediar en vez de tomar el máximo, cambia max() por
 # una media en combinar().
 # ======================================================================
-def fetch_datos_consenso(lat: float, lon: float) -> dict:
+def fetch_datos_consenso(lat: float, lon: float, horas_viento: int = 12) -> dict:
+    """
+    `horas_viento`: ventana (en horas hacia adelante) para el PEOR viento y
+    ráfaga previstos. Por defecto 12h; main.py pasa la cantidad real de
+    horas hasta el próximo envío programado (ver HORAS_ENVIO).
+    """
     fuentes_datos = []
     for fn in (fetch_datos_open_meteo, fetch_datos_yr, fetch_datos_open_meteo_icon):
         try:
-            d = fn(lat, lon)
+            d = fn(lat, lon, horas_viento)
             if d:
                 fuentes_datos.append(d)
         except Exception:
@@ -319,6 +351,8 @@ def fetch_datos_consenso(lat: float, lon: float) -> dict:
         ),
         "viento_kmh": combinar("viento_kmh"),
         "rafagas_kmh": combinar("rafagas_kmh"),
+        "viento_max_prevista_kmh": combinar("viento_max_prevista_kmh"),
+        "rafagas_max_prevista_kmh": combinar("rafagas_max_prevista_kmh"),
         "precipitacion_24h_mm": combinar("precipitacion_24h_mm"),
         "nieve_cm_24h": combinar("nieve_cm_24h"),
     }
