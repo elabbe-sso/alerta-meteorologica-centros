@@ -1,17 +1,18 @@
 # Alertas meteorológicas — sur de Chile (Los Lagos a Magallanes)
 
-Sistema en producción que monitorea 67 centros de cultivo, evalúa umbrales
-propios de viento, lluvia, nieve, oleaje y helada, y envía alertas por email
+Sistema en producción que monitorea 68 centros de cultivo, evalúa umbrales
+propios de viento, lluvia, oleaje y helada, y envía alertas por email
 cuando corresponde. Incluye además una app web de monitoreo en vivo.
 
 **En producción ahora mismo:**
 - Backend (`main.py`) corriendo cada 30 min vía GitHub Actions.
-- App de monitoreo (`app.html`) publicada en GitHub Pages:
-  `https://elabbe79-ctrl.github.io/Alertas-Meteorol-gicas/app.html`
+- App de monitoreo (`app.html`) publicada en GitHub Pages — actualiza este
+  link con tu usuario/repositorio actual:
+  `https://TU-USUARIO.github.io/TU-REPOSITORIO/app.html`
 
 ## Qué está activo hoy
 
-- **67 puntos monitoreados** (centros de cultivo), cada uno con coordenadas
+- **68 puntos monitoreados** (centros de cultivo), cada uno con coordenadas
   exactas y vinculado a una comuna real. No hay comunas "genéricas": todo se
   evalúa punto por punto.
 - **Datos crudos**: se combina el **peor caso** entre varios modelos
@@ -29,7 +30,8 @@ cuando corresponde. Incluye además una app web de monitoreo en vivo.
   - Tormenta eléctrica: código de clima 95/96/99 detectado ahora o en las próximas 6 horas
 - **Notificación por email**: todas las alertas nuevas de un ciclo se agrupan
   en **un solo correo** (nunca uno por alerta). No se repite el mismo aviso
-  antes de 24 horas.
+  antes de 24 horas. El remitente puede mostrar un nombre visible (no solo
+  el correo pelado) configurando el secret opcional `SMTP_FROM_NAME`.
 - **`app.html`**: buscador, ícono de clima, temperatura actual, pronóstico de
   próximas 6h, chips de resumen clicables (filtran por color), enlace
   destacado a "Estados de Puerto" (ver abajo).
@@ -45,6 +47,13 @@ próximas 12 horas**, mirando siempre hacia adelante:
 
 Misma lógica en `fuentes.py` (`_min_prevista()`) y en `app.html`.
 
+## Otros parámetros que se muestran (informativos, no disparan alerta)
+
+- **Mín / Máx**: pronóstico de temperatura del día completo.
+- **Humedad** y **sensación térmica**: dato puntual del momento actual.
+
+Solo viento, ráfaga, lluvia, oleaje, helada y tormenta generan alertas.
+
 ## Por qué ECMWF reemplaza a yr.no en `app.html`, no en Python
 
 yr.no (MET Norway) es una fuente real y de buena calidad, pero **no puede
@@ -58,7 +67,7 @@ nórdica, así que la calidad es equivalente.
 ## Estructura de archivos
 
 ```
-config.py          -> los 67 puntos, sus comunas, y los umbrales
+config.py          -> los 68 puntos, sus comunas, y los umbrales
 fuentes.py         -> recolectores de datos (Open-Meteo, DWD ICON, yr.no, Marine)
 reglas.py          -> motor de reglas (umbrales -> alertas)
 notificadores.py   -> envío por email (activo) y WhatsApp (implementado, sin configurar)
@@ -78,6 +87,7 @@ export SMTP_HOST="smtp.gmail.com"
 export SMTP_PORT="587"
 export SMTP_USER="tu_correo@gmail.com"
 export SMTP_PASS="tu_password_de_aplicacion"
+export SMTP_FROM_NAME="Alertas Centros de Cultivo"   # opcional
 export DESTINATARIOS_EMAIL="correo1@x.cl,correo2@x.cl"
 
 python main.py
@@ -93,16 +103,20 @@ la lista completa, GitHub no muestra el valor anterior).
 `app.html` no necesita desplegarse aparte de GitHub Pages — ya está
 publicada y se actualiza sola cada vez que se sube un cambio al repositorio.
 
-## Ajustar los 67 puntos, comunas y umbrales
+⚠️ Si cambias tu nombre de usuario de GitHub, el link de GitHub Pages
+**cambia y no redirige automáticamente** (a diferencia de los repositorios).
+Hay que volver a compartir el link nuevo.
+
+## Ajustar los 68 puntos, comunas y umbrales
 
 Todo vive en `config.py`:
 - `PUNTOS_ESPECIFICOS`: lista ordenada alfabéticamente de `(nombre, lat, lon, comuna, región)`. Agregar uno nuevo es una línea.
-- `COMUNAS_POR_REGION`: las 12 comunas válidas, agrupadas por región. `validar_comunas_de_puntos()` avisa si algún punto quedó con una comuna que no existe en esta lista.
+- `COMUNAS_POR_REGION`: las comunas válidas, agrupadas por región. `validar_comunas_de_puntos()` avisa si algún punto quedó con una comuna que no existe en esta lista.
 - `UMBRALES_DEFAULT`: los umbrales globales (arriba). `UMBRALES_POR_COMUNA` permite un override por nombre exacto de punto.
 
 Al editar `config.py`, hay que replicar el mismo cambio en las listas
-equivalentes dentro de `app.html` (`PUNTOS_ESPECIFICOS`, `COMUNAS_POR_REGION`)
-para que ambos queden sincronizados.
+equivalentes dentro de `app.html` y `dashboard.html` (`PUNTOS_ESPECIFICOS`
+o `COBERTURA`, y `COMUNAS_POR_REGION`) para que todo quede sincronizado.
 
 ## Lo que existe en el código pero NO está activo
 
@@ -123,7 +137,7 @@ actualmente no influyen en ninguna alerta ni notificación:
   Twilio), pero aún no se configuraron credenciales reales
   (`WA_TOKEN`, `WHATSAPP_PROVIDER`, etc.) — hoy solo se envía por email.
 - **`dashboard.html` + `api.py`** (mapa de Windy): el código está
-  sincronizado con los 67 puntos actuales y la llave de Windy ya está
+  sincronizado con los 68 puntos actuales y la llave de Windy ya está
   puesta, pero requiere un servidor corriendo 24/7 (no es como `app.html`,
   que no necesita backend) — todavía no se desplegó en ningún lado.
 - **Estados de Puerto (DIRECTEMAR)**: no se automatiza porque SITPORT y
