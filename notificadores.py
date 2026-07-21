@@ -21,13 +21,20 @@ import os
 import smtplib
 import requests
 from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from email.utils import formataddr
 
 
 # ======================================================================
 # EMAIL
 # ======================================================================
-def enviar_email(destinatarios: list[str], asunto: str, cuerpo: str) -> None:
+def enviar_email(destinatarios: list[str], asunto: str, cuerpo: str, cuerpo_html: str | None = None) -> None:
+    """
+    Envía un correo. Si se pasa `cuerpo_html`, el correo se manda como
+    multipart/alternative: los clientes que soportan HTML muestran la
+    versión bonita, y los que no (o el modo "solo texto"), muestran
+    `cuerpo` (texto plano) como respaldo automático.
+    """
     smtp_host = os.environ["SMTP_HOST"]
     smtp_port = int(os.environ.get("SMTP_PORT", "587"))
     smtp_user = os.environ["SMTP_USER"]
@@ -35,10 +42,17 @@ def enviar_email(destinatarios: list[str], asunto: str, cuerpo: str) -> None:
     # Nombre visible del remitente (opcional). Si no se define, se usa solo
     # el correo, como antes. Ej: SMTP_FROM_NAME="Alertas Centros de Cultivo"
     smtp_from_name = os.environ.get("SMTP_FROM_NAME", "").strip()
+    remitente = formataddr((smtp_from_name, smtp_user)) if smtp_from_name else smtp_user
 
-    msg = MIMEText(cuerpo, "plain", "utf-8")
+    if cuerpo_html:
+        msg = MIMEMultipart("alternative")
+        msg.attach(MIMEText(cuerpo, "plain", "utf-8"))
+        msg.attach(MIMEText(cuerpo_html, "html", "utf-8"))
+    else:
+        msg = MIMEText(cuerpo, "plain", "utf-8")
+
     msg["Subject"] = asunto
-    msg["From"] = formataddr((smtp_from_name, smtp_user)) if smtp_from_name else smtp_user
+    msg["From"] = remitente
     msg["To"] = ", ".join(destinatarios)
 
     with smtplib.SMTP(smtp_host, smtp_port) as server:
@@ -152,3 +166,4 @@ def enviar_whatsapp(destinatarios: list[str], alerta: dict) -> None:
         enviar_whatsapp_twilio(destinatarios, f"Alerta {nivel} — {zona}: {desc}")
     else:
         enviar_whatsapp_cloud(destinatarios, [nivel, zona, desc])
+      
