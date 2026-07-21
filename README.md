@@ -6,9 +6,8 @@ cuando corresponde. Incluye además una app web de monitoreo en vivo.
 
 **En producción ahora mismo:**
 - Backend (`main.py`) corriendo cada 30 min vía GitHub Actions.
-- App de monitoreo (`app.html`) publicada en GitHub Pages — actualiza este
-  link con tu usuario/repositorio actual:
-  `https://TU-USUARIO.github.io/TU-REPOSITORIO/app.html`
+- App de monitoreo (`app.html`) publicada en GitHub Pages:
+  `https://elabbe-sso.github.io/alerta-meteorologica-centros/app.html`
 
 ## Qué está activo hoy
 
@@ -28,10 +27,17 @@ cuando corresponde. Incluye además una app web de monitoreo en vivo.
   - Oleaje ≥ 2.0 m
   - Helada: mínima pronosticada ≤ -3°C, mirando **solo las próximas 12 horas hacia adelante** (nunca horas ya pasadas — ver detalle abajo)
   - Tormenta eléctrica: código de clima 95/96/99 detectado ahora o en las próximas 6 horas
-- **Notificación por email**: todas las alertas nuevas de un ciclo se agrupan
-  en **un solo correo** (nunca uno por alerta). No se repite el mismo aviso
-  antes de 24 horas. El remitente puede mostrar un nombre visible (no solo
-  el correo pelado) configurando el secret opcional `SMTP_FROM_NAME`.
+- **Notificación por email — reporte en horarios fijos**: el chequeo de datos
+  corre cada vez que el workflow se dispara (cada 30 min), pero el correo
+  solo se **arma y envía a las 8:00, 14:00 y 20:00** (hora de Chile,
+  configurable en `HORAS_ENVIO` de `main.py`). Cada envío es un **reporte
+  completo del estado actual** — no solo lo "nuevo" — agrupado por
+  severidad (rojas / amarillas / informativas). Si no hay ninguna alerta
+  activa, igual se manda un correo confirmando que todo está normal, para
+  que el silencio no se confunda con que el sistema dejó de funcionar. El
+  correo es HTML (con una versión en texto plano de respaldo automático).
+  El remitente puede mostrar un nombre visible (no solo el correo pelado)
+  configurando el secret opcional `SMTP_FROM_NAME`.
 - **`app.html`**: buscador, ícono de clima, temperatura actual, pronóstico de
   próximas 6h, chips de resumen clicables (filtran por color), enlace
   destacado a "Estados de Puerto" (ver abajo).
@@ -71,7 +77,8 @@ config.py          -> los 68 puntos, sus comunas, y los umbrales
 fuentes.py         -> recolectores de datos (Open-Meteo, DWD ICON, yr.no, Marine)
 reglas.py          -> motor de reglas (umbrales -> alertas)
 notificadores.py   -> envío por email (activo) y WhatsApp (implementado, sin configurar)
-estado.py          -> registro en SQLite, ventana de 24h para no repetir avisos
+estado.py          -> registro en SQLite (ya no usado por main.py, ver nota abajo)
+reporte.py         -> arma el correo (texto plano + HTML), agrupado por severidad
 main.py            -> orquestador: junta todo, un ciclo por corrida
 app.html           -> app de monitoreo en vivo, sin servidor (publicada en GitHub Pages)
 dashboard.html + api.py -> dashboard con mapa Windy (no desplegado, ver abajo)
@@ -122,6 +129,13 @@ o `COBERTURA`, y `COMUNAS_POR_REGION`) para que todo quede sincronizado.
 
 Estas piezas están implementadas y funcionan si se activan, pero
 actualmente no influyen en ninguna alerta ni notificación:
+
+- **`estado.py`** (registro SQLite con ventana de 24h): dejó de usarse
+  cuando se pasó al modelo de reportes en horarios fijos — ahora cada
+  envío programado incluye TODAS las alertas activas en ese momento, no
+  solo las "nuevas" desde el último aviso, así que la deduplicación ya no
+  aplica. El archivo queda disponible por si en el futuro se quiere volver
+  a un modelo de notificación inmediata en vez de reportes por horario.
 
 - **Alertas oficiales de SENAPRED**: el código para consultar sus tres
   capas reales (verde/amarilla/roja) sigue en `fuentes.py` y funciona, pero
