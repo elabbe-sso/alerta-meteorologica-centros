@@ -1,0 +1,66 @@
+name: Alertas meteorologicas centros Los Lagos - Magallanes
+
+# Corre main.py cada 30 minutos, automáticamente, en la infraestructura de
+# GitHub (gratis para repos públicos y con cuota gratuita amplia para
+# privados). No necesitas ningún servidor propio prendido.
+#
+# CÓMO ACTIVARLO:
+#   1. Sube esta carpeta completa (incluyendo .github/) a un repositorio
+#      de GitHub (puede ser privado).
+#   2. Ve a Settings -> Secrets and variables -> Actions -> New repository
+#      secret, y agrega cada uno de los secrets que se listan más abajo
+#      en "env:" (SMTP_HOST, SMTP_USER, WA_TOKEN, etc.) con tus valores
+#      reales. Nunca los escribas directamente en este archivo.
+#   3. Ve a la pestaña "Actions" del repo y confirma que el workflow
+#      aparece habilitado. Puedes forzar una corrida manual con el botón
+#      "Run workflow" para probarlo antes de esperar el cron.
+#
+# El cron usa hora UTC. "*/30 * * * *" = cada 30 minutos, todo el día.
+# Ajusta la frecuencia según qué tan seguido quieras revisar el clima.
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch: {}   # permite correrlo manualmente desde la pestaña Actions
+
+jobs:
+  ejecutar-alertas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Restaurar estado de alertas ya enviadas (evita duplicados)
+        uses: actions/cache@v4
+        with:
+          path: estado_alertas.db
+          key: estado-alertas-db-v1
+          restore-keys: |
+            estado-alertas-db-
+
+      - name: Ejecutar el sistema de alertas
+        run: python main.py
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          DESTINATARIOS_EMAIL: ${{ secrets.DESTINATARIOS_EMAIL }}
+          DESTINATARIOS_WHATSAPP: ${{ secrets.DESTINATARIOS_WHATSAPP }}
+          WHATSAPP_PROVIDER: ${{ secrets.WHATSAPP_PROVIDER }}
+          WA_TOKEN: ${{ secrets.WA_TOKEN }}
+          WA_PHONE_NUMBER_ID: ${{ secrets.WA_PHONE_NUMBER_ID }}
+          WA_TEMPLATE_NAME: ${{ secrets.WA_TEMPLATE_NAME }}
+          WA_TEMPLATE_LANG: ${{ secrets.WA_TEMPLATE_LANG }}
+          TWILIO_SID: ${{ secrets.TWILIO_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          TWILIO_WHATSAPP_FROM: ${{ secrets.TWILIO_WHATSAPP_FROM }}
