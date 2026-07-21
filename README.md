@@ -21,8 +21,8 @@ cuando corresponde. Incluye además una app web de monitoreo en vivo.
   - **ECMWF** (modelo europeo explícito, `&models=ecmwf_ifs025`) — sin llave, activo **solo en `app.html`** (ver nota más abajo sobre por qué no en Python).
   - **Open-Meteo Marine API** (altura de olas/oleaje) — endpoint separado, sin llave, activo en ambos.
 - **Alertas por umbral propio** (no por alertas oficiales de ningún organismo — ver más abajo):
-  - Viento sostenido ≥ 40 km/h
-  - Ráfagas ≥ 60 km/h
+  - Viento sostenido ≥ 40 km/h (en el correo: el **peor pronosticado** hasta el próximo envío — ver detalle abajo)
+  - Ráfagas ≥ 60 km/h (mismo criterio de pronóstico que el viento)
   - Lluvia ≥ 50 mm/24h
   - Oleaje ≥ 2.0 m
   - Helada: mínima pronosticada ≤ -3°C, mirando **solo las próximas 12 horas hacia adelante** (nunca horas ya pasadas — ver detalle abajo)
@@ -41,6 +41,21 @@ cuando corresponde. Incluye además una app web de monitoreo en vivo.
 - **`app.html`**: buscador, ícono de clima, temperatura actual, pronóstico de
   próximas 6h, chips de resumen clicables (filtran por color), enlace
   destacado a "Estados de Puerto" (ver abajo).
+
+## Viento y ráfagas en el correo — pronóstico dinámico, no el dato actual
+
+A diferencia del dashboard en vivo (`api.py`, que sí muestra la condición
+del momento), **el correo de reporte compara contra el peor viento/ráfaga
+pronosticado desde ahora hasta el próximo envío programado** (ver
+`HORAS_ENVIO`), no el dato instantáneo. Así, si a las 7:30 el viento está
+tranquilo pero se pronostica fuerte para el mediodía, el reporte de las
+7:30 ya avisa — no espera a que el viento realmente suba.
+
+La ventana se calcula sola en cada corrida (`horas_hasta_proximo_envio()`
+en `main.py`): por ejemplo, a las 14:05 con horarios 7:30/14:00/19:00, la
+ventana es de ~5 horas (hasta las 19:00). Esto usa el mismo mecanismo de
+`reglas.py` que la helada (`usar_pronostico_viento=True`), controlado con
+un parámetro para no afectar al dashboard en vivo.
 
 ## Alerta de helada — "hacia adelante", no hacia atrás
 
@@ -158,4 +173,3 @@ actualmente no influyen en ninguna alerta ni notificación:
   SVIP bloquean explícitamente el acceso automatizado (`robots.txt`). En su
   lugar, `app.html` tiene un botón "⚓ Estados de Puerto" que enlaza
   directamente al sitio oficial para revisarlo manualmente.
-  
