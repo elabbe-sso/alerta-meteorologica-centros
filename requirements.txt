@@ -1,0 +1,4 @@
+requests>=2.31.0
+flask>=3.0.0
+# Opcional: solo si usas WHATSAPP_PROVIDER=twilio en vez de Meta Cloud API
+twilio>=9.0.0

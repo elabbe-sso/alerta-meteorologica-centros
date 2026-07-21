@@ -1,0 +1,132 @@
+# Alertas meteorológicas — sur de Chile (Los Lagos a Magallanes)
+
+Sistema en producción que monitorea 67 centros de cultivo, evalúa umbrales
+propios de viento, lluvia, nieve, oleaje y helada, y envía alertas por email
+cuando corresponde. Incluye además una app web de monitoreo en vivo.
+
+**En producción ahora mismo:**
+- Backend (`main.py`) corriendo cada 30 min vía GitHub Actions.
+- App de monitoreo (`app.html`) publicada en GitHub Pages:
+  `https://elabbe79-ctrl.github.io/Alertas-Meteorol-gicas/app.html`
+
+## Qué está activo hoy
+
+- **67 puntos monitoreados** (centros de cultivo), cada uno con coordenadas
+  exactas y vinculado a una comuna real. No hay comunas "genéricas": todo se
+  evalúa punto por punto.
+- **Datos crudos**: se combina el **peor caso** entre varios modelos
+  meteorológicos, para no perder una alerta si uno solo la subestima:
+  - **Open-Meteo** (mezcla "best_match") — sin llave, activo en Python y en `app.html`.
+  - **DWD ICON** (modelo alemán explícito, `&models=icon_seamless`) — sin llave, activo en ambos.
+  - **ECMWF** (modelo europeo explícito, `&models=ecmwf_ifs025`) — sin llave, activo **solo en `app.html`** (ver nota más abajo sobre por qué no en Python).
+  - **Open-Meteo Marine API** (altura de olas/oleaje) — endpoint separado, sin llave, activo en ambos.
+- **Alertas por umbral propio** (no por alertas oficiales de ningún organismo — ver más abajo):
+  - Viento sostenido ≥ 40 km/h
+  - Ráfagas ≥ 60 km/h
+  - Lluvia ≥ 50 mm/24h
+  - Oleaje ≥ 2.0 m
+  - Helada: mínima pronosticada ≤ -3°C, mirando **solo las próximas 12 horas hacia adelante** (nunca horas ya pasadas — ver detalle abajo)
+  - Tormenta eléctrica: código de clima 95/96/99 detectado ahora o en las próximas 6 horas
+- **Notificación por email**: todas las alertas nuevas de un ciclo se agrupan
+  en **un solo correo** (nunca uno por alerta). No se repite el mismo aviso
+  antes de 24 horas.
+- **`app.html`**: buscador, ícono de clima, temperatura actual, pronóstico de
+  próximas 6h, chips de resumen clicables (filtran por color), enlace
+  destacado a "Estados de Puerto" (ver abajo).
+
+## Alerta de helada — "hacia adelante", no hacia atrás
+
+En vez de mirar la temperatura de ahora mismo o el mínimo de todo el día, se
+calcula la temperatura **más baja pronosticada entre este momento y las
+próximas 12 horas**, mirando siempre hacia adelante:
+- Si el frío **ya pasó** y no se pronostica que continúe, la alerta se cae
+  sola en el siguiente ciclo.
+- Si el frío **viene** más tarde, la alerta se enciende con anticipación.
+
+Misma lógica en `fuentes.py` (`_min_prevista()`) y en `app.html`.
+
+## Por qué ECMWF reemplaza a yr.no en `app.html`, no en Python
+
+yr.no (MET Norway) es una fuente real y de buena calidad, pero **no puede
+llamarse desde el navegador**: exige un header `User-Agent` propio, y el
+`fetch()` de JavaScript no permite que una página modifique ese header
+(restricción de seguridad del navegador). Por eso `app.html` usa ECMWF en su
+lugar — sin llave, mismo endpoint de Open-Meteo, sin ese problema. En la
+práctica, el propio yr.no ya se apoya en datos de ECMWF fuera de la zona
+nórdica, así que la calidad es equivalente.
+
+## Estructura de archivos
+
+```
+config.py          -> los 67 puntos, sus comunas, y los umbrales
+fuentes.py         -> recolectores de datos (Open-Meteo, DWD ICON, yr.no, Marine)
+reglas.py          -> motor de reglas (umbrales -> alertas)
+notificadores.py   -> envío por email (activo) y WhatsApp (implementado, sin configurar)
+estado.py          -> registro en SQLite, ventana de 24h para no repetir avisos
+main.py            -> orquestador: junta todo, un ciclo por corrida
+app.html           -> app de monitoreo en vivo, sin servidor (publicada en GitHub Pages)
+dashboard.html + api.py -> dashboard con mapa Windy (no desplegado, ver abajo)
+.github/workflows/alertas.yml -> automatiza main.py en GitHub Actions
+```
+
+## Cómo correrlo / desplegarlo
+
+```bash
+pip install -r requirements.txt
+
+export SMTP_HOST="smtp.gmail.com"
+export SMTP_PORT="587"
+export SMTP_USER="tu_correo@gmail.com"
+export SMTP_PASS="tu_password_de_aplicacion"
+export DESTINATARIOS_EMAIL="correo1@x.cl,correo2@x.cl"
+
+python main.py
+```
+
+**En producción** esto no hace falta correrlo a mano: `.github/workflows/alertas.yml`
+ya lo ejecuta automáticamente cada 30 minutos en GitHub Actions, leyendo las
+credenciales desde repository secrets (mismo nombre que las variables de
+entorno de arriba). Para agregar/cambiar destinatarios: Settings → Secrets
+and variables → Actions → editar `DESTINATARIOS_EMAIL` (hay que reescribir
+la lista completa, GitHub no muestra el valor anterior).
+
+`app.html` no necesita desplegarse aparte de GitHub Pages — ya está
+publicada y se actualiza sola cada vez que se sube un cambio al repositorio.
+
+## Ajustar los 67 puntos, comunas y umbrales
+
+Todo vive en `config.py`:
+- `PUNTOS_ESPECIFICOS`: lista ordenada alfabéticamente de `(nombre, lat, lon, comuna, región)`. Agregar uno nuevo es una línea.
+- `COMUNAS_POR_REGION`: las 12 comunas válidas, agrupadas por región. `validar_comunas_de_puntos()` avisa si algún punto quedó con una comuna que no existe en esta lista.
+- `UMBRALES_DEFAULT`: los umbrales globales (arriba). `UMBRALES_POR_COMUNA` permite un override por nombre exacto de punto.
+
+Al editar `config.py`, hay que replicar el mismo cambio en las listas
+equivalentes dentro de `app.html` (`PUNTOS_ESPECIFICOS`, `COMUNAS_POR_REGION`)
+para que ambos queden sincronizados.
+
+## Lo que existe en el código pero NO está activo
+
+Estas piezas están implementadas y funcionan si se activan, pero
+actualmente no influyen en ninguna alerta ni notificación:
+
+- **Alertas oficiales de SENAPRED**: el código para consultar sus tres
+  capas reales (verde/amarilla/roja) sigue en `fuentes.py` y funciona, pero
+  la llamada está **comentada** en `main.py` y `app.html` — a pedido
+  explícito, el sistema solo notifica por umbral propio, no por alertas
+  oficiales de ningún organismo.
+- **yr.no en el backend Python**: el código existe en `fuentes.py`, pero
+  requiere editar `YR_USER_AGENT` con el nombre real de tu app y un
+  contacto válido antes de que MET Norway responda datos reales — sin ese
+  paso, la llamada falla silenciosamente y el consenso sigue funcionando
+  igual con las demás fuentes.
+- **WhatsApp**: implementado en `notificadores.py` (Meta Cloud API o
+  Twilio), pero aún no se configuraron credenciales reales
+  (`WA_TOKEN`, `WHATSAPP_PROVIDER`, etc.) — hoy solo se envía por email.
+- **`dashboard.html` + `api.py`** (mapa de Windy): el código está
+  sincronizado con los 67 puntos actuales y la llave de Windy ya está
+  puesta, pero requiere un servidor corriendo 24/7 (no es como `app.html`,
+  que no necesita backend) — todavía no se desplegó en ningún lado.
+- **Estados de Puerto (DIRECTEMAR)**: no se automatiza porque SITPORT y
+  SVIP bloquean explícitamente el acceso automatizado (`robots.txt`). En su
+  lugar, `app.html` tiene un botón "⚓ Estados de Puerto" que enlaza
+  directamente al sitio oficial para revisarlo manualmente.

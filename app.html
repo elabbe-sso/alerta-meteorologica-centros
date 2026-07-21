@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Monitor Austral — Alertas en vivo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#0b161f; --surface:#13232f; --surface-2:#1b303e; --line:#24404f;
+    --ink:#e8eef2; --muted:#7f97a6; --glacier:#4cc9e0;
+    --verde:#3fb950; --amarilla:#e3b341; --roja:#e5484d;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"Inter",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  body{max-width:640px;margin:0 auto;padding:0 16px 40px}
+
+  header{padding:22px 4px 14px;position:sticky;top:0;background:linear-gradient(180deg,var(--bg) 70%,transparent);z-index:5}
+  .brand{font-family:"Space Grotesk",sans-serif;font-weight:700;font-size:22px;letter-spacing:.01em}
+  .brand span{color:var(--glacier)}
+  .sub{font-size:12.5px;color:var(--muted);margin-top:2px}
+  .bar{display:flex;align-items:center;gap:10px;margin-top:14px}
+  .updated{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--muted)}
+  button.refresh{margin-left:auto;font-family:"IBM Plex Mono",monospace;font-size:12px;
+    color:var(--bg);background:var(--glacier);border:0;padding:8px 14px;border-radius:8px;cursor:pointer;font-weight:500}
+  button.refresh:disabled{opacity:.5;cursor:default}
+
+  .summary{display:flex;gap:8px;margin:8px 4px 18px;flex-wrap:wrap}
+  .chip{font-family:"IBM Plex Mono",monospace;font-size:11.5px;padding:5px 10px;border-radius:20px;
+    border:1px solid var(--line);color:var(--muted);display:flex;align-items:center;gap:6px}
+  .chip b{color:var(--ink);font-weight:500}
+  .chip .d{width:8px;height:8px;border-radius:50%}
+  .chip.clickable{cursor:pointer;transition:.15s}
+  .chip.clickable:hover{border-color:var(--glacier);background:var(--surface)}
+  .chip.activo{border-color:var(--glacier);background:rgba(76,201,224,.12);color:var(--ink)}
+  .chip-x{font-size:9px;color:var(--glacier)}
+
+  .region{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--muted);margin:22px 4px 8px;display:flex;gap:10px;align-items:center}
+  .region::after{content:"";flex:1;height:1px;background:var(--line)}
+
+  .card{background:var(--surface);border:1px solid var(--line);border-left-width:3px;
+    border-radius:12px;padding:14px 16px;margin-bottom:10px;transition:.15s}
+  .card.verde{border-left-color:var(--verde)}
+  .card.amarilla{border-left-color:var(--amarilla)}
+  .card.roja{border-left-color:var(--roja);box-shadow:0 0 20px -8px rgba(229,72,77,.5)}
+  .card .top{display:flex;align-items:center;gap:10px}
+  .card .name{font-family:"Space Grotesk",sans-serif;font-weight:500;font-size:16px}
+  .badge{margin-left:auto;font-family:"IBM Plex Mono",monospace;font-size:10px;text-transform:uppercase;
+    letter-spacing:.05em;padding:3px 9px;border-radius:20px;font-weight:500}
+  .badge.verde{background:rgba(63,185,80,.15);color:var(--verde)}
+  .badge.amarilla{background:rgba(227,179,65,.15);color:var(--amarilla)}
+  .badge.roja{background:rgba(229,72,77,.15);color:var(--roja)}
+  .badge.ok{background:var(--surface-2);color:var(--muted)}
+  .reasons{margin-top:6px;font-size:13px;color:var(--amarilla)}
+  .reasons.roja{color:var(--roja)}
+  .metrics{display:flex;gap:16px;margin-top:10px;flex-wrap:wrap}
+  .metric{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--muted)}
+  .port-link-top{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--glacier);
+    text-decoration:none;background:rgba(76,201,224,.15);border:1px solid rgba(76,201,224,.4);
+    padding:7px 14px;border-radius:20px;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+  .port-link-top:hover{background:rgba(76,201,224,.25)}
+  .metric b{color:var(--ink);font-weight:500}
+
+  /* Buscador */
+  .search-wrap{position:relative;margin-top:12px}
+  .search{width:100%;background:var(--surface);border:1px solid var(--line);color:var(--ink);
+    font-family:"Inter",sans-serif;font-size:14px;padding:10px 14px 10px 36px;border-radius:10px;
+    outline:none;transition:.15s}
+  .search:focus{border-color:var(--glacier)}
+  .search::placeholder{color:var(--muted)}
+  .search-wrap::before{content:"⌕";position:absolute;left:12px;top:50%;transform:translateY(-50%);
+    color:var(--muted);font-size:16px;pointer-events:none}
+  .no-results{color:var(--muted);font-size:13px;text-align:center;padding:30px 10px}
+
+  /* Icono de clima + resumen del clima actual */
+  .wx-icon{font-size:19px;line-height:1;filter:saturate(1.15)}
+  .card .top{gap:8px}
+
+  /* Pronóstico próximas horas */
+  .hourly{display:flex;gap:2px;margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
+  .hourly .h{flex:1;text-align:center;padding:4px 2px;border-radius:6px;transition:.12s}
+  .hourly .h:hover{background:var(--surface-2)}
+  .hourly .h .t{font-family:"IBM Plex Mono",monospace;font-size:9.5px;color:var(--muted)}
+  .hourly .h .i{font-size:15px;margin:3px 0}
+  .hourly .h .v{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink)}
+
+  /* Grid de métricas ampliado */
+  .metrics-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:9px 6px;margin-top:12px}
+  .mcell{background:var(--surface-2);border-radius:8px;padding:6px 4px;text-align:center}
+  .mcell .lbl{font-family:"IBM Plex Mono",monospace;font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+  .mcell .val{font-family:"Space Grotesk",sans-serif;font-size:14px;font-weight:500;margin-top:2px}
+
+  /* Animación de entrada de tarjetas */
+  @keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+  .card{animation:fadeUp .3s ease both}
+  .card:hover{border-color:var(--glacier);transform:translateY(-1px)}
+
+  .legend{margin-top:24px;padding:14px 16px;background:var(--surface);border:1px solid var(--line);
+    border-radius:12px;font-size:12px;color:var(--muted);line-height:1.7}
+  .legend .row{display:flex;gap:8px;align-items:center}
+  .legend .d{width:9px;height:9px;border-radius:50%;flex:none}
+  .foot{margin-top:16px;font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--muted);text-align:center;line-height:1.6}
+  .foot a{color:var(--glacier);text-decoration:none}
+  .error{background:rgba(229,72,77,.12);border:1px solid var(--roja);color:#ffd7d8;
+    padding:12px 14px;border-radius:10px;font-size:13px;margin:10px 0}
+  .skeleton{opacity:.4}
+</style>
+</head>
+<body>
+  <header>
+    <div class="brand">Monitor <span>Austral</span></div>
+    <div class="sub">Alertas meteorológicas en vivo · Los Lagos → Magallanes</div>
+    <div class="bar">
+      <span class="updated" id="updated">Cargando…</span>
+      <a href="https://sitport.directemar.cl/#/general" target="_blank" rel="noopener" class="port-link-top">⚓ Estados de Puerto ↗</a>
+      <button class="refresh" id="refresh" onclick="cargar()">Actualizar</button>
+    </div>
+    <div class="search-wrap">
+      <input class="search" id="buscador" type="text" placeholder="Buscar centro o comuna…" oninput="filtrar()" />
+    </div>
+  </header>
+
+  <div class="summary" id="summary"></div>
+  <div id="contenido"></div>
+
+  <div class="legend">
+    <div class="row"><span class="d" style="background:var(--roja)"></span>Roja — condición severa o varios umbrales superados</div>
+    <div class="row"><span class="d" style="background:var(--amarilla)"></span>Amarilla — un umbral superado</div>
+    <div class="row"><span class="d" style="background:var(--verde)"></span>Sin alerta — condiciones bajo umbral</div>
+  </div>
+  <div class="foot">
+    Datos: <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a> ·
+    Umbrales propios editables en el código · Se actualiza solo cada 15 min
+  </div>
+
+<script>
+/* ---------- Cobertura y umbrales (edítalos libremente) ---------- */
+const UMBRAL = { viento:40, rafaga:60, precip:50, tempMin:-3, ola:2.0 };  // km/h, km/h, mm/24h, °C, m
+const OVERRIDE = {};
+const REGIONES = [
+  { region:"Los Lagos", comunas:[] },
+  { region:"Aysén", comunas:[] },
+  { region:"Magallanes", comunas:[] },
+];
+
+// Comunas cubiertas, agrupadas por región — mismo listado que
+// COMUNAS_POR_REGION en config.py. Referencia de qué comunas son válidas
+// para el 5° campo de cada punto en PUNTOS_ESPECIFICOS.
+const COMUNAS_POR_REGION = {
+  "Los Lagos": ["Puerto Montt","Calbuco","Quemchi","Castro","Achao","Chonchi","Quellón","Hornopirén"],
+  "Aysén": ["Puerto Cisnes","Puerto Aguirre","Puerto Chacabuco"],
+  "Magallanes": ["Río Verde"],
+};
+
+// PUNTOS ESPECÍFICOS: coordenadas exactas más allá del centro de la comuna
+// (una caleta, un centro de cultivo, un faro, una cabaña, un fundo...).
+// Formato: [nombre, lat, lon, region, comuna_de_referencia]. Agrega los tuyos aquí.
+// Cada uno puede tener su propio umbral en OVERRIDE usando su nombre exacto.
+const PUNTOS_ESPECIFICOS = [
+  ["Abtao", -41.79944, -73.36083, "Los Lagos", "Calbuco"],
+  ["Acopio Chinquihue", -41.51607, -73.02722, "Los Lagos", "Puerto Montt"],
+  ["Acopio Puerto Fernández", -42.1475, -73.48111, "Los Lagos", "Quemchi"],
+  ["Aguantao", -42.52, -73.58583, "Los Lagos", "Castro"],
+  ["Aldunate", -44.3275, -72.89833, "Aysén", "Puerto Cisnes"],
+  ["Aulen", -41.85068, -72.81142, "Los Lagos", "Hornopirén"],
+  ["Bertrand", -52.81687, -72.43779, "Magallanes", "Río Verde"],
+  ["Buill", -42.43716, -72.70246, "Los Lagos", "Hornopirén"],
+  ["Cachihue", -42.30047, -73.0669, "Los Lagos", "Quemchi"],
+  ["Calen 1", -42.33139, -73.44444, "Los Lagos", "Quemchi"],
+  ["Calen 2", -42.3475, -73.47889, "Los Lagos", "Quemchi"],
+  ["Caleta Soledad", -42.36444, -72.48806, "Los Lagos", "Hornopirén"],
+  ["Canal Contreras", -52.775, -72.59722, "Magallanes", "Río Verde"],
+  ["Caniglia 2", -45.41667, -74.07056, "Aysén", "Puerto Chacabuco"],
+  ["Caucahue", -42.11222, -73.425, "Los Lagos", "Quemchi"],
+  ["Chauco", -42.925, -73.59333, "Los Lagos", "Quellón"],
+  ["Chaullin Norte", -43.03417, -73.44694, "Los Lagos", "Quellón"],
+  ["Chaullin Sur", -43.0975, -73.41639, "Los Lagos", "Quellón"],
+  ["Chaullin Weste", -43.05667, -73.46028, "Los Lagos", "Quellón"],
+  ["Chidhuapi 1", -41.81556, -73.11667, "Los Lagos", "Calbuco"],
+  ["Chidhuapi 2", -41.85389, -73.08417, "Los Lagos", "Calbuco"],
+  ["Chidhuapi 3", -41.85278, -73.05306, "Los Lagos", "Calbuco"],
+  ["Chidhuapi 4", -41.83111, -73.11306, "Los Lagos", "Calbuco"],
+  ["Chope", -41.79667, -73.10806, "Los Lagos", "Calbuco"],
+  ["Churrecue", -45.35667, -73.54111, "Aysén", "Puerto Chacabuco"],
+  ["Colaco 4", -41.77333, -73.35194, "Los Lagos", "Calbuco"],
+  ["Darsena", -52.58833, -72.36444, "Magallanes", "Río Verde"],
+  ["Darsena Norte", -52.58842, -72.36446, "Magallanes", "Río Verde"],
+  ["Desembocadura", -52.73809, -72.63738, "Magallanes", "Río Verde"],
+  ["Ducañas", -42.25232, -73.17865, "Los Lagos", "Quemchi"],
+  ["El Manzano", -42.02544, -72.65009, "Los Lagos", "Hornopirén"],
+  ["Ensenada Rys", -52.56111, -72.34194, "Magallanes", "Río Verde"],
+  ["Estero", -52.85621, -72.57773, "Magallanes", "Río Verde"],
+  ["Estero Conche", -44.42361, -72.78222, "Aysén", "Puerto Cisnes"],
+  ["Furia", -52.62306, -72.41056, "Magallanes", "Río Verde"],
+  ["Imelev", -42.61528, -73.41472, "Los Lagos", "Achao"],
+  ["Isla García", -52.83816, -72.53191, "Magallanes", "Río Verde"],
+  ["Isla Tac", -42.40143, -73.15192, "Los Lagos", "Quemchi"],
+  ["Jacaff", -44.30444, -72.94333, "Aysén", "Puerto Cisnes"],
+  ["Linlinao", -42.56917, -73.74806, "Los Lagos", "Chonchi"],
+  ["Llancacheo", -41.74914, -73.03428, "Los Lagos", "Calbuco"],
+  ["Luchin", -45.04851, -73.40206, "Aysén", "Puerto Aguirre"],
+  ["Macetero", -44.44694, -72.81222, "Aysén", "Puerto Cisnes"],
+  ["Matilde", -45.48421, -74.20692, "Aysén", "Puerto Chacabuco"],
+  ["Navarro", -52.89667, -72.7097, "Magallanes", "Río Verde"],
+  ["Pollollo", -41.80652, -73.00925, "Los Lagos", "Calbuco"],
+  ["Punta Gruesa", -42.21001, -72.64493, "Los Lagos", "Hornopirén"],
+  ["Punta Isla", -52.7713, -72.36162, "Magallanes", "Río Verde"],
+  ["Punta Laura", -52.66806, -72.42111, "Magallanes", "Río Verde"],
+  ["Punta Laura Norte", -52.64694, -72.40667, "Magallanes", "Río Verde"],
+  ["Punta Victoria", -45.34944, -73.46667, "Aysén", "Puerto Chacabuco"],
+  ["Punta Yoye", -42.86639, -73.67944, "Los Lagos", "Quellón"],
+  ["Quilen", -42.9875, -73.54278, "Los Lagos", "Quellón"],
+  ["Reñihue", -42.52386, -72.66882, "Los Lagos", "Hornopirén"],
+  ["Sector 3", -42.46222, -73.25611, "Aysén", "Puerto Cisnes"],
+  ["Sur Este", -41.77959, -73.01941, "Los Lagos", "Calbuco"],
+  ["Teupa", -42.67972, -73.66972, "Los Lagos", "Chonchi"],
+  ["Tranqui I", -42.99806, -73.43583, "Los Lagos", "Quellón"],
+  ["Tranqui II", -43.00278, -73.39444, "Los Lagos", "Quellón"],
+  ["Transito", -44.8375, -73.60889, "Aysén", "Puerto Cisnes"],
+  ["Tubildad", -42.12528, -73.46944, "Los Lagos", "Quemchi"],
+  ["Unicornio", -52.62889, -72.3725, "Magallanes", "Río Verde"],
+  ["Unicornio Sur", -52.63528, -72.39417, "Magallanes", "Río Verde"],
+  ["Vilupulli", -42.60111, -73.77528, "Los Lagos", "Chonchi"],
+  ["Voigue", -42.30072, -73.20496, "Los Lagos", "Quemchi"],
+  ["Weste Isla Luz", -45.48806, -74.09333, "Aysén", "Puerto Chacabuco"],
+  ["Yelcho", -43.21472, -73.58028, "Los Lagos", "Quellón"],
+  ["Zañartu", -44.4125, -72.79306, "Aysén", "Puerto Cisnes"],
+];
+
+const TODAS = REGIONES.flatMap(r => r.comunas.map(c => ({region:r.region, nombre:c[0], lat:c[1], lon:c[2]})))
+  .concat(PUNTOS_ESPECIFICOS.map(p => ({region:p[3], comuna:p[4], nombre:p[0], lat:p[1], lon:p[2], esPunto:true})));
+
+// CAPITANÍA DE PUERTO real que corresponde a cada comuna (fuente: listado
+// oficial de Gobernaciones Marítimas de DIRECTEMAR). Solo las comunas con
+// costa/puerto activo tienen una; las que no (Osorno, Coyhaique, Torres del
+// Paine: sin litoral) quedan sin enlace a SITPORT. Donde la comuna no tiene
+// capitanía propia sino que depende de otra (ej. Quellón depende de Castro),
+// se indica el nombre real de la capitanía a cargo, no el de la comuna.
+const CAPITANIA_DE_PUERTO = {
+  "Puerto Montt":   "Capitanía de Puerto de Puerto Montt",
+  "Castro":         "Capitanía de Puerto de Castro",
+  "Quellón":        "Capitanía de Puerto de Castro",     // depende de Castro
+  "Quemchi":        "Capitanía de Puerto de Castro",     // Alcaldía de Mar, depende de Castro
+  "Achao":          "Capitanía de Puerto de Castro",     // Alcaldía de Mar, depende de Castro
+  "Chonchi":        "Capitanía de Puerto de Castro",     // Alcaldía de Mar, depende de Castro
+  "Hornopirén":     "Capitanía de Puerto de Hornopirén",
+  "Puerto Aguirre": "Capitanía de Puerto de Puerto Aguirre",
+  "Puerto Chacabuco":"Capitanía de Puerto de Chacabuco",
+};
+
+function umbralDe(nombre){ return Object.assign({}, UMBRAL, OVERRIDE[nombre] || {}); }
+
+/* ---------- Iconos y texto según código WMO (Open-Meteo) ---------- */
+function iconoClima(code){
+  if(code == null) return "—";
+  if(code === 0) return "☀️";
+  if([1,2].includes(code)) return "🌤️";
+  if(code === 3) return "☁️";
+  if([45,48].includes(code)) return "🌫️";
+  if([51,53,55,56,57].includes(code)) return "🌦️";
+  if([61,63,65,66,67,80,81,82].includes(code)) return "🌧️";
+  if([71,73,75,77,85,86].includes(code)) return "❄️";
+  if([95,96,99].includes(code)) return "⛈️";
+  return "—";
+}
+function esTormenta(code){ return [95,96,99].includes(code); }
+
+/* ---------- Evaluación de una comuna contra sus umbrales ---------- */
+function evaluar(nombre, d){
+  const u = umbralDe(nombre);
+  const viento  = d.current?.wind_speed_10m;
+  const rafaga  = d.current?.wind_gusts_10m;
+  const tempActual = d.current?.temperature_2m;
+  const humedad = d.current?.relative_humidity_2m;
+  const sensacion = d.current?.apparent_temperature;
+  const codigoActual = d.current?.weather_code;
+  const precip = d.daily?.precipitation_sum?.[0];
+  const nieve  = d.daily?.snowfall_sum?.[0];
+  const tmin   = d.daily?.temperature_2m_min?.[0];
+  const tmax   = d.daily?.temperature_2m_max?.[0];
+  const ola    = d.olaMax;  // se agrega aparte, viene de la API marina (ver cargarMarino)
+
+  // Próximas horas: busca el índice horario actual dentro del arreglo y
+  // toma las siguientes 6 horas para la franja visual (con forecast_days=2
+  // siempre hay margen), y las próximas 12h para la mínima "hacia adelante".
+  let proximasHoras = [];
+  let tminPrevista = null;
+  if(d.hourly?.time){
+    const ahora = new Date();
+    let idx = d.hourly.time.findIndex(t => new Date(t) >= ahora);
+    if(idx < 0) idx = 0;
+    for(let i = idx; i < Math.min(idx + 6, d.hourly.time.length); i++){
+      proximasHoras.push({
+        hora: new Date(d.hourly.time[i]).getHours(),
+        temp: d.hourly.temperature_2m?.[i],
+        codigo: d.hourly.weather_code?.[i],
+      });
+    }
+    // Mínima SOLO entre las horas que faltan (nunca las ya pasadas), para
+    // que la alerta de helada se caiga sola cuando el frío ya ocurrió y
+    // no se pronostica que continúe.
+    const ventana = d.hourly.temperature_2m?.slice(idx, idx + 12).filter(t => t != null) || [];
+    tminPrevista = ventana.length ? Math.min(...ventana) : null;
+  }
+  const tormentaProxima = proximasHoras.some(h => esTormenta(h.codigo)) || esTormenta(codigoActual);
+
+  const motivos = [];
+  if (viento != null && viento >= u.viento)  motivos.push(`Viento sostenido ${Math.round(viento)} km/h`);
+  if (rafaga != null && rafaga >= u.rafaga)  motivos.push(`Ráfagas ${Math.round(rafaga)} km/h`);
+  if (precip != null && precip >= u.precip)  motivos.push(`Lluvia ${Math.round(precip)} mm/24h`);
+  if (tminPrevista != null && tminPrevista <= u.tempMin) motivos.push(`Mínima pronosticada ${Math.round(tminPrevista)}°C`);
+  if (ola    != null && ola    >= u.ola)     motivos.push(`Oleaje ${ola.toFixed(1)} m`);
+  if (tormentaProxima) motivos.push(`Tormenta eléctrica`);
+
+  // Severidad: roja si 2+ motivos, ráfaga muy por encima del umbral, o tormenta eléctrica.
+  let estado = "verde";
+  if (motivos.length) {
+    estado = (motivos.length >= 2 || tormentaProxima || (rafaga && rafaga >= u.rafaga*1.4)) ? "roja" : "amarilla";
+  }
+
+  return { estado, motivos, tempActual, viento, rafaga, humedad, sensacion, precip, nieve, tmin, tmax,
+           codigoActual, proximasHoras, ola };
+}
+
+/* ---------- SENAPRED oficial: tres capas públicas, una por color ---------- */
+const SENAPRED_CAPAS = {
+  verde:    "https://services3.arcgis.com/CNzkI2T3GmfwkaAR/arcgis/rest/services/METEOROLOGICAS_VERDE/FeatureServer/0",
+  amarilla: "https://services3.arcgis.com/CNzkI2T3GmfwkaAR/arcgis/rest/services/METEOROLOGICAS_AMARILLA/FeatureServer/0",
+  roja:     "https://services3.arcgis.com/CNzkI2T3GmfwkaAR/arcgis/rest/services/METEOROLOGICAS_ROJA/FeatureServer/0",
+};
+const norm = s => (s||"").normalize("NFKD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
+
+async function cargarSenapred(){
+  const porComuna = {};   // { "Punta Arenas": {color:"roja", causa:"Viento"} }
+  const porRegion  = {};  // { "Los Lagos": {color:"amarilla", causa:"..."} }
+  const pesoColor = {verde:1, amarilla:2, roja:3};
+
+  for(const [color, url] of Object.entries(SENAPRED_CAPAS)){
+    try{
+      const q = `${url}/query?where=1=1&outFields=REGION,PROVINCIA,COMUNA,TIPO_ALERT,CAUSALIDAD&returnGeometry=false&f=json`;
+      const resp = await fetch(q);
+      if(!resp.ok) continue;
+      const data = await resp.json();
+      for(const feat of (data.features || [])){
+        const a = feat.attributes || {};
+        const causa = a.CAUSALIDAD || a.TIPO_ALERT || "evento meteorológico";
+        if(a.COMUNA){
+          // Alerta con comuna específica (ej. "Amarilla para Osorno por crecida"):
+          // queda acotada a esa comuna, NUNCA se propaga a toda la región.
+          const actual = porComuna[a.COMUNA];
+          if(!actual || pesoColor[color] > pesoColor[actual.color])
+            porComuna[a.COMUNA] = {color, causa};
+        } else if(a.REGION){
+          // Sin comuna específica: es una alerta genuinamente regional (ej. ATP
+          // declarada para toda la región). Solo AHORA aplica de respaldo a
+          // los puntos que no tengan su propia alerta de comuna.
+          const actual = porRegion[a.REGION];
+          if(!actual || pesoColor[color] > pesoColor[actual.color])
+            porRegion[a.REGION] = {color, causa};
+        }
+      }
+    }catch(e){ /* si una capa falla, seguimos con las demás */ }
+  }
+  return {porComuna, porRegion};
+}
+
+/* ---------- Carga de datos (una sola llamada multi-punto + SENAPRED) ---------- */
+async function cargar(){
+  const btn = document.getElementById("refresh");
+  btn.disabled = true; btn.textContent = "Actualizando…";
+  document.getElementById("updated").textContent = "Consultando…";
+
+  const lats = TODAS.map(c => c.lat).join(",");
+  const lons = TODAS.map(c => c.lon).join(",");
+
+  const urlBase = `https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lons}`
+            + `&current=temperature_2m,relative_humidity_2m,apparent_temperature,wind_speed_10m,wind_gusts_10m,weather_code`
+            + `&hourly=temperature_2m,weather_code,precipitation,snowfall`
+            + `&daily=precipitation_sum,snowfall_sum,temperature_2m_min,temperature_2m_max,wind_gusts_10m_max`
+            + `&timezone=America/Santiago&forecast_days=2`;
+
+  // Segunda fuente: modelo explícito DWD ICON (linaje distinto al "best_match"
+  // por defecto), para tomar el peor caso de viento/ráfaga entre ambos.
+  const urlIcon = urlBase + `&models=icon_seamless`;
+
+  // Tercera fuente: ECMWF (el modelo europeo, uno de los más precisos a
+  // nivel global). Reemplaza en la práctica a yr.no para app.html: yr.no no
+  // puede consultarse desde el navegador (ver nota en README), pero yr.no
+  // en sí ya se apoya en datos de ECMWF fuera de la zona nórdica — así que
+  // esto da una fuente igual de sólida, sin llave y sin problemas de CORS.
+  const urlEcmwf = urlBase + `&models=ecmwf_ifs025`;
+
+  // Cuarta fuente, aparte: altura de olas/oleaje (Open-Meteo Marine API),
+  // relevante para operaciones en los centros de cultivo.
+  const urlMarino = `https://marine-api.open-meteo.com/v1/marine?latitude=${lats}&longitude=${lons}`
+            + `&daily=wave_height_max&timezone=America/Santiago&forecast_days=1`;
+
+  try{
+    const [respBase, respIcon, respEcmwf, respMarino] = await Promise.all([
+      fetch(urlBase),
+      fetch(urlIcon).catch(() => null),
+      fetch(urlEcmwf).catch(() => null),
+      fetch(urlMarino).catch(() => null),
+    ]);
+    if(!respBase.ok) throw new Error("HTTP " + respBase.status);
+
+    let dataBase = await respBase.json();
+    if(!Array.isArray(dataBase)) dataBase = [dataBase];
+
+    let dataIcon = [];
+    if(respIcon?.ok){
+      dataIcon = await respIcon.json();
+      if(!Array.isArray(dataIcon)) dataIcon = [dataIcon];
+    }
+
+    let dataEcmwf = [];
+    if(respEcmwf?.ok){
+      dataEcmwf = await respEcmwf.json();
+      if(!Array.isArray(dataEcmwf)) dataEcmwf = [dataEcmwf];
+    }
+
+    let dataMarino = [];
+    if(respMarino?.ok){
+      dataMarino = await respMarino.json();
+      if(!Array.isArray(dataMarino)) dataMarino = [dataMarino];
+    }
+
+    // SENAPRED está desactivado a propósito: las alertas se generan
+    // solo cuando un punto supera sus propios umbrales (viento, ráfagas,
+    // lluvia, nieve, helada, oleaje), no por alertas oficiales de la región/comuna.
+    TODAS.forEach((c,i) => {
+      const d = dataBase[i] || {};
+      const otrosModelos = [dataIcon[i], dataEcmwf[i]].filter(Boolean);
+
+      // Peor caso de viento/ráfaga entre los modelos disponibles.
+      for(const otro of otrosModelos){
+        if(!otro?.current) continue;
+        if(otro.current.wind_speed_10m != null)
+          d.current.wind_speed_10m = Math.max(d.current.wind_speed_10m ?? 0, otro.current.wind_speed_10m);
+        if(otro.current.wind_gusts_10m != null)
+          d.current.wind_gusts_10m = Math.max(d.current.wind_gusts_10m ?? 0, otro.current.wind_gusts_10m);
+      }
+
+      // Peor caso de temperatura horaria (la más baja de los 3 modelos en
+      // cada hora), para que la mínima "hacia adelante" de la helada
+      // considere el consenso completo, no solo el modelo base.
+      if(d.hourly?.temperature_2m){
+        for(const otro of otrosModelos){
+          const tempsOtro = otro?.hourly?.temperature_2m;
+          if(!tempsOtro) continue;
+          d.hourly.temperature_2m = d.hourly.temperature_2m.map((t, idx) =>
+            tempsOtro[idx] != null && (t == null || tempsOtro[idx] < t) ? tempsOtro[idx] : t
+          );
+        }
+      }
+
+      d.olaMax = dataMarino[i]?.daily?.wave_height_max?.[0] ?? null;
+
+      c.eval = evaluar(c.nombre, d);
+      c.oficial = null;
+    });
+
+    render();
+    const hora = new Date().toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"});
+    document.getElementById("updated").textContent = "Actualizado " + hora;
+  }catch(e){
+    document.getElementById("contenido").innerHTML =
+      `<div class="error">No se pudo obtener el clima (${e.message}).<br><br>
+      Si estás viendo esto dentro de una vista previa (por ejemplo la app de Claude),
+      esa vista bloquea las conexiones externas. Abre este archivo en tu navegador
+      (Safari o Chrome) y funcionará. Luego toca Actualizar.</div>`;
+    document.getElementById("updated").textContent = "Sin conexión";
+  }finally{
+    btn.disabled = false; btn.textContent = "Actualizar";
+  }
+}
+
+/* ---------- Render ---------- */
+let filtroEstado = null;  // null = sin filtro, o "roja"/"amarilla"/"verde"
+
+function filtrarPorEstado(estado){
+  filtroEstado = (filtroEstado === estado) ? null : estado;  // clic de nuevo = quitar filtro
+  render();
+  document.getElementById("contenido").scrollIntoView({behavior:"smooth", block:"start"});
+}
+
+function render(){
+  // Resumen (siempre sobre el total, no sobre el filtro de búsqueda/estado)
+  const conteo = {roja:0, amarilla:0, verde:0};
+  TODAS.forEach(c => conteo[c.eval.estado]++);
+  const chip = (estado, label) => {
+    const activo = filtroEstado === estado;
+    return `<span class="chip clickable ${activo?'activo':''}" onclick="filtrarPorEstado('${estado}')">
+      <span class="d" style="background:var(--${estado})"></span><b>${conteo[estado]}</b> ${label}
+      ${activo ? ' <span class="chip-x">✕</span>' : ''}
+    </span>`;
+  };
+  document.getElementById("summary").innerHTML =
+    chip("roja","rojas") + chip("amarilla","amarillas") + chip("verde","sin alerta");
+
+  const q = norm(document.getElementById("buscador")?.value || "");
+  const coincide = c => (!q || norm(c.nombre).includes(q) || norm(c.comuna||"").includes(q))
+                      && (!filtroEstado || c.eval.estado === filtroEstado);
+
+  // Tarjetas por región, con las alertas activas primero
+  let html = "";
+  let totalVisible = 0;
+  for(const r of REGIONES){
+    const items = TODAS.filter(c => c.region === r.region && coincide(c))
+      .sort((a,b) => peso(b.eval.estado) - peso(a.eval.estado));
+    if(!items.length) continue;
+    totalVisible += items.length;
+    html += `<div class="region">${r.region}</div>`;
+    for(const c of items){
+      const ev = c.eval, est = ev.estado;
+      const badge = est === "verde"
+        ? `<span class="badge ok">Sin alerta</span>`
+        : `<span class="badge ${est}">${est}</span>`;
+      const motivos = [...ev.motivos];
+      if(c.oficial) motivos.unshift(`SENAPRED${c.oficial.esRegional ? " (ATP región)" : ""}: ${c.oficial.causa}`);
+      const motivosHtml = motivos.length
+        ? `<div class="reasons ${est==="roja"?"roja":""}">${motivos.join(" · ")}</div>` : "";
+
+      // Franja de próximas horas
+      let horasHtml = "";
+      if(ev.proximasHoras?.length){
+        horasHtml = `<div class="hourly">` + ev.proximasHoras.map(h =>
+          `<div class="h"><div class="t">${String(h.hora).padStart(2,"0")}h</div>
+           <div class="i">${iconoClima(h.codigo)}</div>
+           <div class="v">${h.temp!=null?Math.round(h.temp)+"°":"—"}</div></div>`
+        ).join("") + `</div>`;
+      }
+
+      html += `<div class="card ${est}">
+        <div class="top">
+          <span class="wx-icon">${iconoClima(ev.codigoActual)}</span>
+          <span class="name">${c.nombre}${c.esPunto ? ' <span style="color:var(--muted);font-weight:400;font-size:11px">· centro</span>' : ''}${ev.tempActual!=null ? ` <span style="color:var(--ink);font-weight:400;">· ${Math.round(ev.tempActual)}°C</span>` : ''}</span>
+          ${badge}
+        </div>
+        ${c.comuna ? `<div style="font-size:11px;color:var(--muted);margin-top:-2px;">${c.comuna}, ${c.region}</div>` : ''}
+        ${motivosHtml}
+        ${horasHtml}
+        <div class="metrics-grid">
+          <div class="mcell"><div class="lbl">Viento</div><div class="val">${fmt(ev.viento,"km/h")}</div></div>
+          <div class="mcell"><div class="lbl">Ráfaga</div><div class="val">${fmt(ev.rafaga,"km/h")}</div></div>
+          <div class="mcell"><div class="lbl">Humedad</div><div class="val">${ev.humedad!=null?Math.round(ev.humedad)+"%":"—"}</div></div>
+          <div class="mcell"><div class="lbl">Sens. térm.</div><div class="val">${fmt(ev.sensacion,"°C")}</div></div>
+          <div class="mcell"><div class="lbl">Lluvia</div><div class="val">${fmt(ev.precip,"mm")}</div></div>
+          <div class="mcell"><div class="lbl">Mín</div><div class="val">${fmt(ev.tmin,"°C")}</div></div>
+          <div class="mcell"><div class="lbl">Máx</div><div class="val">${fmt(ev.tmax,"°C")}</div></div>
+          <div class="mcell"><div class="lbl">Oleaje</div><div class="val">${ev.ola!=null?ev.ola.toFixed(1)+" m":"—"}</div></div>
+        </div>
+      </div>`;
+    }
+  }
+  document.getElementById("contenido").innerHTML = totalVisible
+    ? html
+    : `<div class="no-results">Sin resultados para "${document.getElementById("buscador")?.value || ""}"</div>`;
+}
+function filtrar(){ render(); }
+const peso = e => ({roja:3, amarilla:2, verde:1}[e] || 0);
+const fmt = (v,u) => v==null ? "—" : `${Math.round(v)} ${u}`;
+
+/* ---------- Arranque + auto-refresco ---------- */
+cargar();
+setInterval(cargar, 15*60*1000);
+</script>
+</body>
+</html>
