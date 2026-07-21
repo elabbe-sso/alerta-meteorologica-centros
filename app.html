@@ -141,6 +141,11 @@
 /* ---------- Cobertura y umbrales (edítalos libremente) ---------- */
 const UMBRAL = { viento:40, rafaga:60, precip:50, tempMin:-3, ola:2.0 };  // km/h, km/h, mm/24h, °C, m
 const OVERRIDE = {};
+// Override de umbrales por región completa (se aplica antes que OVERRIDE
+// por nombre puntual). Los Lagos y Aysén usan el default (-3°C).
+const UMBRAL_POR_REGION = {
+  "Magallanes": { tempMin: -5 },  // heladas más severas y frecuentes en el extremo sur
+};
 const REGIONES = [
   { region:"Los Lagos", comunas:[] },
   { region:"Aysén", comunas:[] },
@@ -252,7 +257,9 @@ const CAPITANIA_DE_PUERTO = {
   "Puerto Chacabuco":"Capitanía de Puerto de Chacabuco",
 };
 
-function umbralDe(nombre){ return Object.assign({}, UMBRAL, OVERRIDE[nombre] || {}); }
+function umbralDe(nombre, region){
+  return Object.assign({}, UMBRAL, UMBRAL_POR_REGION[region] || {}, OVERRIDE[nombre] || {});
+}
 
 /* ---------- Iconos y texto según código WMO (Open-Meteo) ---------- */
 function iconoClima(code){
@@ -270,8 +277,8 @@ function iconoClima(code){
 function esTormenta(code){ return [95,96,99].includes(code); }
 
 /* ---------- Evaluación de una comuna contra sus umbrales ---------- */
-function evaluar(nombre, d){
-  const u = umbralDe(nombre);
+function evaluar(nombre, d, region){
+  const u = umbralDe(nombre, region);
   const viento  = d.current?.wind_speed_10m;
   const rafaga  = d.current?.wind_gusts_10m;
   const tempActual = d.current?.temperature_2m;
@@ -460,7 +467,7 @@ async function cargar(){
 
       d.olaMax = dataMarino[i]?.daily?.wave_height_max?.[0] ?? null;
 
-      c.eval = evaluar(c.nombre, d);
+      c.eval = evaluar(c.nombre, d, c.region);
       c.oficial = null;
     });
 
@@ -571,3 +578,4 @@ setInterval(cargar, 15*60*1000);
 </script>
 </body>
 </html>
+
