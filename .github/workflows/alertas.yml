@@ -26,7 +26,7 @@ on:
 jobs:
   ejecutar-alertas:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Descargar el código
         uses: actions/checkout@v4
@@ -65,3 +65,4 @@ jobs:
           TWILIO_SID: ${{ secrets.TWILIO_SID }}
           TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
           TWILIO_WHATSAPP_FROM: ${{ secrets.TWILIO_WHATSAPP_FROM }}
+          
