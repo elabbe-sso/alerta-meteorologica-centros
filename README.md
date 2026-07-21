@@ -25,7 +25,7 @@ cuando corresponde. Incluye además una app web de monitoreo en vivo.
   - Ráfagas ≥ 60 km/h (mismo criterio de pronóstico que el viento)
   - Lluvia ≥ 50 mm/24h
   - Oleaje ≥ 2.0 m
-  - Helada: mínima pronosticada ≤ -3°C, mirando **solo las próximas 12 horas hacia adelante** (nunca horas ya pasadas — ver detalle abajo)
+  - Helada: mínima pronosticada ≤ -3°C (Los Lagos y Aysén) o ≤ -5°C (Magallanes), mirando **solo las próximas 12 horas hacia adelante** (nunca horas ya pasadas — ver detalle abajo)
   - Tormenta eléctrica: código de clima 95/96/99 detectado ahora o en las próximas 6 horas
 - **Notificación por email — reporte en horarios fijos**: el chequeo de datos
   corre cada vez que el workflow se dispara (cada 30 min), pero el correo
@@ -66,7 +66,11 @@ próximas 12 horas**, mirando siempre hacia adelante:
   sola en el siguiente ciclo.
 - Si el frío **viene** más tarde, la alerta se enciende con anticipación.
 
-Misma lógica en `fuentes.py` (`_min_prevista()`) y en `app.html`.
+El umbral en sí varía por región (`UMBRALES_POR_REGION` en `config.py`,
+`UMBRAL_POR_REGION` en `app.html`): -3°C en Los Lagos y Aysén, -5°C en
+Magallanes, donde las heladas moderadas son normales y no ameritan alerta.
+
+Misma lógica en `fuentes.py` (`_extremo_prevista()`) y en `app.html`.
 
 ## Otros parámetros que se muestran (informativos, no disparan alerta)
 
@@ -134,7 +138,7 @@ Hay que volver a compartir el link nuevo.
 Todo vive en `config.py`:
 - `PUNTOS_ESPECIFICOS`: lista ordenada alfabéticamente de `(nombre, lat, lon, comuna, región)`. Agregar uno nuevo es una línea.
 - `COMUNAS_POR_REGION`: las comunas válidas, agrupadas por región. `validar_comunas_de_puntos()` avisa si algún punto quedó con una comuna que no existe en esta lista.
-- `UMBRALES_DEFAULT`: los umbrales globales (arriba). `UMBRALES_POR_COMUNA` permite un override por nombre exacto de punto.
+- `UMBRALES_DEFAULT`: los umbrales globales (arriba). `UMBRALES_POR_REGION` permite un override para toda una región (ej. helada en Magallanes). `UMBRALES_POR_COMUNA` permite un override por nombre exacto de punto (se aplica después, y pisa al de región si ambos aplican).
 
 Al editar `config.py`, hay que replicar el mismo cambio en las listas
 equivalentes dentro de `app.html` y `dashboard.html` (`PUNTOS_ESPECIFICOS`
