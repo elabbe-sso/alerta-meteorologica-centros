@@ -323,26 +323,48 @@ function evaluar(nombre, d, region){
   const tormentaProxima = proximasHoras.some(h => esTormenta(h.codigo)) || esTormenta(codigoActual);
 
   const motivos = [];
-  const severidades = [];  // paralelo a motivos: severidad de cada condición individual
-  if (viento != null && viento >= u.viento){ motivos.push(`Viento sostenido ${Math.round(viento)} km/h`); severidades.push("amarilla"); }
-  if (rafaga != null && rafaga >= u.rafaga){ motivos.push(`Ráfagas ${Math.round(rafaga)} km/h`); severidades.push("amarilla"); }
-  if (precip != null && precip >= u.precip){ motivos.push(`Lluvia ${Math.round(precip)} mm/24h`); severidades.push("amarilla"); }
-  if (tminPrevista != null && tminPrevista <= u.tempMin){ motivos.push(`Mínima pronosticada ${Math.round(tminPrevista)}°C`); severidades.push("verde"); }
-  if (ola    != null && ola    >= u.ola){ motivos.push(`Oleaje ${ola.toFixed(1)} m`); severidades.push("amarilla"); }
-  if (tormentaProxima){ motivos.push(`Tormenta eléctrica`); severidades.push("roja"); }
+  let countAmarillas = 0;   // cuenta viento/ráfaga/lluvia/oleaje activas (NO la helada)
+  let esRoja = false;       // tormenta, o cualquier condición 30%+ sobre su umbral
+  let hayHelada = false;
 
-  // Ráfaga extrema (30% sobre el umbral): sube a roja aunque sea la única condición.
-  if (rafaga != null && rafaga >= u.rafaga * 1.3) severidades.push("roja");
-
-  // Severidad final = la más grave entre las condiciones individuales que se
-  // cumplieron (mismo criterio que el correo): tormenta > viento/ráfaga/lluvia/
-  // oleaje > helada. Ya no depende de CUÁNTAS condiciones se cumplan.
-  const PESO_SEVERIDAD = { verde: 1, amarilla: 2, roja: 3 };
-  let estado = "verde";
-  if (severidades.length) {
-    estado = severidades.reduce((peor, actual) =>
-      PESO_SEVERIDAD[actual] > PESO_SEVERIDAD[peor] ? actual : peor, "verde");
+  if (viento != null && viento >= u.viento) {
+    motivos.push(`Viento sostenido ${Math.round(viento)} km/h`);
+    countAmarillas++;
+    if (viento >= u.viento * 1.3) esRoja = true;
   }
+  if (rafaga != null && rafaga >= u.rafaga) {
+    motivos.push(`Ráfagas ${Math.round(rafaga)} km/h`);
+    countAmarillas++;
+    if (rafaga >= u.rafaga * 1.3) esRoja = true;
+  }
+  if (precip != null && precip >= u.precip) {
+    motivos.push(`Lluvia ${Math.round(precip)} mm/24h`);
+    countAmarillas++;
+    if (precip >= u.precip * 1.3) esRoja = true;
+  }
+  if (ola != null && ola >= u.ola) {
+    motivos.push(`Oleaje ${ola.toFixed(1)} m`);
+    countAmarillas++;
+    if (ola >= u.ola * 1.3) esRoja = true;
+  }
+  if (tminPrevista != null && tminPrevista <= u.tempMin) {
+    motivos.push(`Mínima pronosticada ${Math.round(tminPrevista)}°C`);
+    hayHelada = true;
+  }
+  if (tormentaProxima) {
+    motivos.push(`Tormenta eléctrica`);
+    countAmarillas++;  // sola es amarilla; si se suma a otra amarilla, sube a roja por el conteo
+  }
+
+  // 2 o más condiciones amarillas juntas (sin contar la helada) -> roja.
+  // La helada nunca cuenta para este "2 o más": helada + 1 amarilla (incluida
+  // la tormenta) se queda en amarilla; helada + 2 amarillas sí sube a roja.
+  if (countAmarillas >= 2) esRoja = true;
+
+  let estado = "verde";
+  if (esRoja) estado = "roja";
+  else if (countAmarillas >= 1) estado = "amarilla";
+  // si solo hayHelada (sin nada más), estado se queda en "verde" -> informativa
 
   return { estado, motivos, tempActual, viento, rafaga, humedad, sensacion, precip, nieve, tmin, tmax,
            codigoActual, proximasHoras, ola };
