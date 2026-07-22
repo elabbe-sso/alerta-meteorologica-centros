@@ -33,6 +33,35 @@ MENSAJE_SIN_ALERTAS = (
 URL_APP = "https://elabbe-sso.github.io/alerta-meteorologica-centros/app.html"
 
 
+def _extraer_condicion(mensaje: str, comuna: str) -> str:
+    """
+    Quita el ' en {comuna}.' final del mensaje, dejando solo la condición
+    en sí — para poder mostrar varias condiciones del mismo centro juntas
+    sin repetir su nombre en cada una.
+    """
+    sufijo = f" en {comuna}."
+    if comuna and mensaje.endswith(sufijo):
+        return mensaje[: -len(sufijo)]
+    return mensaje.rstrip(".")
+
+
+def _agrupar_por_centro(alertas_color: list[dict]) -> list[tuple[str, list[str]]]:
+    """
+    Agrupa las alertas de UNA severidad por nombre de centro, preservando
+    el orden de aparición. Devuelve una lista de (centro, [condiciones]).
+    """
+    orden: list[str] = []
+    mapa: dict[str, list[str]] = {}
+    for a in alertas_color:
+        comuna = a.get("comuna") or ""
+        condicion = _extraer_condicion(a["mensaje"], comuna)
+        if comuna not in mapa:
+            mapa[comuna] = []
+            orden.append(comuna)
+        mapa[comuna].append(condicion)
+    return [(c, mapa[c]) for c in orden]
+
+
 def _agrupar_por_severidad(alertas: list[dict]) -> dict[str, list[dict]]:
     grupos: dict[str, list[dict]] = {"roja": [], "amarilla": [], "verde": []}
     for a in alertas:
@@ -55,18 +84,11 @@ def generar_cuerpo_texto(alertas: list[dict], ahora: datetime) -> str:
     for color in ("roja", "amarilla", "verde"):
         if not grupos[color]:
             continue
-        partes.append(f"\n--- {TITULO_SEVERIDAD[color]} ({len(grupos[color])}) ---")
-        for a in grupos[color]:
-            partes.append(f"- {a['mensaje']}")
+        centros = _agrupar_por_centro(grupos[color])
+        partes.append(f"\n--- {TITULO_SEVERIDAD[color]} ({len(centros)}) ---")
+        for comuna, condiciones in centros:
+            partes.append(f"- {comuna}: {' · '.join(condiciones)}")
     return "\n".join(partes) + "\n"
-
-
-def _resaltar_nombre(mensaje: str, comuna: str) -> str:
-    """Envuelve la primera aparición del nombre del centro en <strong>,
-    para que destaque dentro de la oración sin repetirlo aparte."""
-    if not comuna or comuna not in mensaje:
-        return mensaje
-    return mensaje.replace(comuna, f"<strong>{comuna}</strong>", 1)
 
 
 def generar_cuerpo_html(alertas: list[dict], ahora: datetime) -> str:
@@ -85,21 +107,23 @@ def generar_cuerpo_html(alertas: list[dict], ahora: datetime) -> str:
             if not grupos[color]:
                 continue
             hex_color = COLOR_HEX[color]
+            centros = _agrupar_por_centro(grupos[color])
             filas = "".join(
                 f"""
                 <div style="border-left:3px solid {hex_color};background:#fafafa;
                             border-radius:6px;padding:10px 14px;margin-bottom:8px;
-                            font-size:14px;color:#27272a;line-height:1.4;">
-                  {_resaltar_nombre(a['mensaje'], a.get('comuna', ''))}
+                            font-size:13.5px;color:#27272a;line-height:1.5;">
+                  <strong>{comuna}</strong><br>
+                  <span style="font-size:12.5px;color:#3a3a3a;">{' &middot; '.join(condiciones)}</span>
                 </div>"""
-                for a in grupos[color]
+                for comuna, condiciones in centros
             )
             secciones.append(f"""
               <div style="margin-bottom:22px;">
                 <div style="font-family:monospace;font-size:12px;letter-spacing:.08em;
                             text-transform:uppercase;color:{hex_color};font-weight:700;
                             margin-bottom:8px;">
-                  {TITULO_SEVERIDAD[color]} &middot; {len(grupos[color])}
+                  {TITULO_SEVERIDAD[color]} &middot; {len(centros)}
                 </div>
                 {filas}
               </div>""")
