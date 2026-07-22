@@ -170,7 +170,7 @@ def notificar(alertas: list[dict]) -> None:
     log.info("Horario de envío (%s). Armando reporte con %d alerta(s) activa(s).",
               ahora.strftime("%H:%M"), len(alertas))
 
-    asunto = generar_asunto(alertas)
+    asunto = generar_asunto(alertas, ahora)
     cuerpo_texto = generar_cuerpo_texto(alertas, ahora)
     cuerpo_html = generar_cuerpo_html(alertas, ahora)
 

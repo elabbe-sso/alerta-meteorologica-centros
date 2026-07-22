@@ -40,6 +40,7 @@ SEVERIDAD = {
     "precipitacion": "amarilla",
     "helada": "verde",
     "oleaje": "amarilla",
+    "tormenta": "roja",
 }
 ORDEN = {"verde": 1, "amarilla": 2, "roja": 3}
 

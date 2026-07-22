@@ -166,4 +166,3 @@ def enviar_whatsapp(destinatarios: list[str], alerta: dict) -> None:
         enviar_whatsapp_twilio(destinatarios, f"Alerta {nivel} — {zona}: {desc}")
     else:
         enviar_whatsapp_cloud(destinatarios, [nivel, zona, desc])
-      

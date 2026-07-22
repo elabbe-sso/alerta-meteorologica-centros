@@ -193,3 +193,4 @@ def validar_comunas_de_puntos() -> list[str]:
                 f"COMUNAS_POR_REGION['{region}']"
             )
     return problemas
+

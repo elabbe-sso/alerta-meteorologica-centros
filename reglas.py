@@ -36,8 +36,7 @@ def evaluar_umbrales(comuna: str, datos: dict, umbrales: dict, usar_pronostico_v
             "comuna": comuna,
             "tipo": "viento",
             "nivel": "propia",
-            "mensaje": f"{etiqueta_viento} de {viento} km/h en {comuna} "
-                       f"(umbral: {umbrales['viento_kmh']} km/h).",
+            "mensaje": f"{etiqueta_viento} de {viento} km/h en {comuna}.",
         })
 
     if rafagas is not None and rafagas >= umbrales["rafagas_kmh"]:
@@ -45,8 +44,7 @@ def evaluar_umbrales(comuna: str, datos: dict, umbrales: dict, usar_pronostico_v
             "comuna": comuna,
             "tipo": "rafagas",
             "nivel": "propia",
-            "mensaje": f"{etiqueta_rafagas} de {rafagas} km/h en {comuna} "
-                       f"(umbral: {umbrales['rafagas_kmh']} km/h).",
+            "mensaje": f"{etiqueta_rafagas} de {rafagas} km/h en {comuna}.",
         })
 
     precip = datos.get("precipitacion_24h_mm")
@@ -55,8 +53,7 @@ def evaluar_umbrales(comuna: str, datos: dict, umbrales: dict, usar_pronostico_v
             "comuna": comuna,
             "tipo": "precipitacion",
             "nivel": "propia",
-            "mensaje": f"Agua caída de {precip} mm en 24h en {comuna} "
-                       f"(umbral: {umbrales['precipitacion_24h_mm']} mm).",
+            "mensaje": f"Agua caída de {precip} mm en 24h en {comuna}.",
         })
 
     # Helada: mira la mínima pronosticada SOLO en las horas que faltan (no
@@ -68,8 +65,7 @@ def evaluar_umbrales(comuna: str, datos: dict, umbrales: dict, usar_pronostico_v
             "comuna": comuna,
             "tipo": "helada",
             "nivel": "propia",
-            "mensaje": f"Mínima pronosticada de {temp}°C en {comuna} "
-                       f"(umbral: {umbrales['temp_min_c']}°C).",
+            "mensaje": f"Mínima pronosticada de {temp}°C en {comuna}.",
         })
 
     # Oleaje: usa el máximo del día si está disponible, si no el actual.
@@ -81,8 +77,20 @@ def evaluar_umbrales(comuna: str, datos: dict, umbrales: dict, usar_pronostico_v
             "comuna": comuna,
             "tipo": "oleaje",
             "nivel": "propia",
-            "mensaje": f"Oleaje de {ola} m en {comuna} "
-                       f"(umbral: {umbrales['altura_ola_m']} m).",
+            "mensaje": f"Oleaje de {ola} m en {comuna}.",
+        })
+
+    # Tormenta eléctrica: detectada ahora o en las próximas 6 horas (mismo
+    # criterio que app.html). Open-Meteo no entrega una probabilidad
+    # numérica para esto (el código de clima es una categoría, no un
+    # porcentaje), así que el contexto que sí podemos dar con certeza es
+    # la ventana de tiempo en la que se prevé.
+    if datos.get("tormenta_proxima"):
+        alertas.append({
+            "comuna": comuna,
+            "tipo": "tormenta",
+            "nivel": "propia",
+            "mensaje": f"Tormenta eléctrica prevista en las próximas 6 horas en {comuna}.",
         })
 
     return alertas

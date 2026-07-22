@@ -28,6 +28,10 @@ MENSAJE_SIN_ALERTAS = (
     "en los centros de cultivo."
 )
 
+# Link a la app de monitoreo en vivo (app.html en GitHub Pages). Actualiza
+# esto si cambias de usuario/repositorio de GitHub.
+URL_APP = "https://elabbe-sso.github.io/alerta-meteorologica-centros/app.html"
+
 
 def _agrupar_por_severidad(alertas: list[dict]) -> dict[str, list[dict]]:
     grupos: dict[str, list[dict]] = {"roja": [], "amarilla": [], "verde": []}
@@ -37,13 +41,8 @@ def _agrupar_por_severidad(alertas: list[dict]) -> dict[str, list[dict]]:
     return grupos
 
 
-def generar_asunto(alertas: list[dict]) -> str:
-    if not alertas:
-        return "Reporte de alertas — sin novedades"
-    grupos = _agrupar_por_severidad(alertas)
-    if grupos["roja"]:
-        return f"Reporte de alertas — {len(grupos['roja'])} roja(s), {len(alertas)} en total"
-    return f"Reporte de alertas — {len(alertas)} activa(s)"
+def generar_asunto(alertas: list[dict], ahora: datetime) -> str:
+    return f"Reporte alertas meteorológicas — {ahora.strftime('%H:%M')} hrs"
 
 
 def generar_cuerpo_texto(alertas: list[dict], ahora: datetime) -> str:
@@ -60,6 +59,14 @@ def generar_cuerpo_texto(alertas: list[dict], ahora: datetime) -> str:
         for a in grupos[color]:
             partes.append(f"- {a['mensaje']}")
     return "\n".join(partes) + "\n"
+
+
+def _resaltar_nombre(mensaje: str, comuna: str) -> str:
+    """Envuelve la primera aparición del nombre del centro en <strong>,
+    para que destaque dentro de la oración sin repetirlo aparte."""
+    if not comuna or comuna not in mensaje:
+        return mensaje
+    return mensaje.replace(comuna, f"<strong>{comuna}</strong>", 1)
 
 
 def generar_cuerpo_html(alertas: list[dict], ahora: datetime) -> str:
@@ -83,7 +90,7 @@ def generar_cuerpo_html(alertas: list[dict], ahora: datetime) -> str:
                 <div style="border-left:3px solid {hex_color};background:#fafafa;
                             border-radius:6px;padding:10px 14px;margin-bottom:8px;
                             font-size:14px;color:#27272a;line-height:1.4;">
-                  {a['mensaje']}
+                  {_resaltar_nombre(a['mensaje'], a.get('comuna', ''))}
                 </div>"""
                 for a in grupos[color]
             )
@@ -107,11 +114,11 @@ def generar_cuerpo_html(alertas: list[dict], ahora: datetime) -> str:
       <table role="presentation" width="600" cellpadding="0" cellspacing="0"
              style="background:#ffffff;border-radius:12px;overflow:hidden;max-width:600px;width:100%;">
         <tr>
-          <td style="background:#0b161f;padding:20px 28px;">
+          <td style="background:#0d1420;padding:20px 28px;">
             <div style="font-family:Arial,sans-serif;font-size:18px;font-weight:700;color:#ffffff;">
-              Centros <span style="color:#4cc9e0;">Cermaq</span>
+              Centros <span style="color:#0096a0;">Cermaq</span>
             </div>
-            <div style="font-family:monospace;font-size:12px;color:#7f97a6;margin-top:4px;">
+            <div style="font-family:monospace;font-size:12px;color:#9aa8bd;margin-top:4px;">
               Reporte de alertas &middot; {fecha} (hora Chile)
             </div>
           </td>
@@ -119,11 +126,16 @@ def generar_cuerpo_html(alertas: list[dict], ahora: datetime) -> str:
         <tr>
           <td style="padding:24px 28px;">
             {cuerpo_interno}
+            <a href="{URL_APP}" style="display:block;text-align:center;background:#00b8c4;
+               color:#ffffff;font-family:Arial,sans-serif;font-size:14px;font-weight:700;
+               text-decoration:none;padding:12px;border-radius:8px;margin-top:20px;">
+              Ver monitoreo en vivo →
+            </a>
           </td>
         </tr>
         <tr>
-          <td style="padding:16px 28px;border-top:1px solid #e4e4e7;">
-            <div style="font-family:monospace;font-size:11px;color:#a1a1aa;line-height:1.6;">
+          <td style="padding:16px 28px;border-top:1px solid #d2d2cd;">
+            <div style="font-family:monospace;font-size:11px;color:#324664;line-height:1.6;">
               Datos: Open-Meteo, yr.no, DWD ICON, ECMWF &middot; Umbrales propios de cada centro
             </div>
           </td>

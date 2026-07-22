@@ -63,6 +63,11 @@ def _extremo_prevista(horas_iso: list[str], valores: list, horas_ventana: int, a
 # Ventana fija para la helada (no depende del horario de notificación).
 HORAS_VENTANA_HELADA = 12
 
+# Tormenta eléctrica: se avisa si se detecta ahora o dentro de esta ventana
+# (mismo criterio que app.html). Códigos WMO que Open-Meteo usa para tormenta.
+HORAS_VENTANA_TORMENTA = 6
+CODIGOS_TORMENTA = {95, 96, 99}
+
 
 def fetch_datos_open_meteo(lat: float, lon: float, horas_viento: int = 12) -> dict:
     """
@@ -75,8 +80,8 @@ def fetch_datos_open_meteo(lat: float, lon: float, horas_viento: int = 12) -> di
     params = {
         "latitude": lat,
         "longitude": lon,
-        "current": "temperature_2m,wind_speed_10m,wind_gusts_10m,snowfall",
-        "hourly": "precipitation,snowfall,temperature_2m,wind_speed_10m,wind_gusts_10m",
+        "current": "temperature_2m,wind_speed_10m,wind_gusts_10m,snowfall,weather_code",
+        "hourly": "precipitation,snowfall,temperature_2m,wind_speed_10m,wind_gusts_10m,weather_code",
         "timezone": "America/Santiago",
         "forecast_days": 2,
         "past_days": 1,
@@ -98,6 +103,14 @@ def fetch_datos_open_meteo(lat: float, lon: float, horas_viento: int = 12) -> di
     precip_24h = sum(v for v in hourly.get("precipitation", [])[ini:idx_ahora] if v is not None)
     nieve_24h = sum(v for v in hourly.get("snowfall", [])[ini:idx_ahora] if v is not None)
 
+    # Tormenta eléctrica: códigos WMO 95/96/99, detectada AHORA o en las
+    # próximas HORAS_VENTANA_TORMENTA horas (mismo criterio que app.html).
+    codigos_futuros = hourly.get("weather_code", [])[idx_ahora:idx_ahora + HORAS_VENTANA_TORMENTA]
+    tormenta_proxima = (
+        current.get("weather_code") in CODIGOS_TORMENTA
+        or any(c in CODIGOS_TORMENTA for c in codigos_futuros)
+    )
+
     return {
         "fuente": "open-meteo",
         "timestamp": current.get("time"),
@@ -107,6 +120,7 @@ def fetch_datos_open_meteo(lat: float, lon: float, horas_viento: int = 12) -> di
         "rafagas_kmh": current.get("wind_gusts_10m"),
         "viento_max_prevista_kmh": _extremo_prevista(horas, hourly.get("wind_speed_10m", []), horas_viento, max),
         "rafagas_max_prevista_kmh": _extremo_prevista(horas, hourly.get("wind_gusts_10m", []), horas_viento, max),
+        "tormenta_proxima": tormenta_proxima,
         "precipitacion_24h_mm": round(precip_24h, 1),
         "nieve_cm_24h": round(nieve_24h * 100, 1),  # open-meteo entrega cm ya, se deja explícito
     }
@@ -355,6 +369,7 @@ def fetch_datos_consenso(lat: float, lon: float, horas_viento: int = 12) -> dict
         "rafagas_max_prevista_kmh": combinar("rafagas_max_prevista_kmh"),
         "precipitacion_24h_mm": combinar("precipitacion_24h_mm"),
         "nieve_cm_24h": combinar("nieve_cm_24h"),
+        "tormenta_proxima": combinar("tormenta_proxima"),  # True si cualquier fuente la detecta
     }
 
     # Datos marinos: fuente separada, se agregan aparte (no hay "peor caso"
