@@ -15,12 +15,18 @@ name: Alertas meteorologicas centros Los Lagos - Magallanes
 #      aparece habilitado. Puedes forzar una corrida manual con el botón
 #      "Run workflow" para probarlo antes de esperar el cron.
 #
-# El cron usa hora UTC. "*/30 * * * *" = cada 30 minutos, todo el día.
-# Ajusta la frecuencia según qué tan seguido quieras revisar el clima.
+# El cron usa hora UTC. "7,37 * * * *" = a los minutos 7 y 37 de cada hora
+# (cada 30 minutos, pero corrido del punto exacto). Esto es a propósito:
+# GitHub Actions documenta que sus workflows programados son "best effort"
+# y pueden atrasarse o directamente saltarse — el momento de mayor
+# congestión es justo el inicio de cada hora y de cada media hora (:00 y
+# :30). Al correr en un minuto "raro", se evita ese pico de carga. El
+# margen de 15 min en es_hora_de_enviar() (main.py) sigue cubriendo esto
+# sin problema para los horarios de envío (7:30, 14:00, 19:00).
 
 on:
   schedule:
-    - cron: "*/30 * * * *"
+    - cron: "7,37 * * * *"
   workflow_dispatch: {}   # permite correrlo manualmente desde la pestaña Actions
 
 jobs:
