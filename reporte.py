@@ -32,6 +32,11 @@ MENSAJE_SIN_ALERTAS = (
 # esto si cambias de usuario/repositorio de GitHub.
 URL_APP = "https://elabbe-sso.github.io/alerta-meteorologica-centros/app.html"
 
+# A partir de esta cantidad de centros en UNA severidad, se condensa en una
+# lista de nombres en vez de una tarjeta de detalle por centro — para que
+# el correo no se vuelva larguísimo cuando hay muchas alertas a la vez.
+UMBRAL_CONDENSAR = 10
+
 
 def _extraer_condicion(mensaje: str, comuna: str) -> str:
     """
@@ -86,8 +91,11 @@ def generar_cuerpo_texto(alertas: list[dict], ahora: datetime) -> str:
             continue
         centros = _agrupar_por_centro(grupos[color])
         partes.append(f"\n--- {TITULO_SEVERIDAD[color]} ({len(centros)}) ---")
-        for comuna, condiciones in centros:
-            partes.append(f"- {comuna}: {' · '.join(condiciones)}")
+        if len(centros) >= UMBRAL_CONDENSAR:
+            partes.append(", ".join(comuna for comuna, _ in centros))
+        else:
+            for comuna, condiciones in centros:
+                partes.append(f"- {comuna}: {' · '.join(condiciones)}")
     return "\n".join(partes) + "\n"
 
 
@@ -108,16 +116,30 @@ def generar_cuerpo_html(alertas: list[dict], ahora: datetime) -> str:
                 continue
             hex_color = COLOR_HEX[color]
             centros = _agrupar_por_centro(grupos[color])
-            filas = "".join(
-                f"""
+
+            if len(centros) >= UMBRAL_CONDENSAR:
+                # Muchos centros: se condensa en una sola lista de nombres,
+                # no una tarjeta por cada uno (si no, el correo se hace
+                # eterno). El detalle completo queda a un clic en la app.
+                nombres = ", ".join(comuna for comuna, _ in centros)
+                filas = f"""
                 <div style="border-left:3px solid {hex_color};background:#fafafa;
                             border-radius:6px;padding:10px 14px;margin-bottom:8px;
-                            font-size:13.5px;color:#27272a;line-height:1.5;">
-                  <strong>{comuna}</strong><br>
-                  <span style="font-size:12.5px;color:#3a3a3a;">{' &middot; '.join(condiciones)}</span>
+                            font-size:12.5px;color:#3a3a3a;line-height:1.6;">
+                  {nombres}
                 </div>"""
-                for comuna, condiciones in centros
-            )
+            else:
+                filas = "".join(
+                    f"""
+                    <div style="border-left:3px solid {hex_color};background:#fafafa;
+                                border-radius:6px;padding:10px 14px;margin-bottom:8px;
+                                font-size:13.5px;color:#27272a;line-height:1.5;">
+                      <strong>{comuna}</strong><br>
+                      <span style="font-size:12.5px;color:#3a3a3a;">{' &middot; '.join(condiciones)}</span>
+                    </div>"""
+                    for comuna, condiciones in centros
+                )
+
             secciones.append(f"""
               <div style="margin-bottom:22px;">
                 <div style="font-family:monospace;font-size:12px;letter-spacing:.08em;
@@ -139,12 +161,25 @@ def generar_cuerpo_html(alertas: list[dict], ahora: datetime) -> str:
              style="background:#ffffff;border-radius:12px;overflow:hidden;max-width:600px;width:100%;">
         <tr>
           <td style="background:#0d1420;padding:20px 28px;">
-            <div style="font-family:Arial,sans-serif;font-size:18px;font-weight:700;color:#ffffff;">
-              Centros <span style="color:#0096a0;">Cermaq</span>
-            </div>
-            <div style="font-family:monospace;font-size:12px;color:#9aa8bd;margin-top:4px;">
-              Reporte de alertas &middot; {fecha} (hora Chile)
-            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td>
+                  <div style="font-family:Arial,sans-serif;font-size:18px;font-weight:700;color:#ffffff;">
+                    Centros <span style="color:#0096a0;">Cermaq</span>
+                  </div>
+                  <div style="font-family:monospace;font-size:12px;color:#9aa8bd;margin-top:4px;">
+                    Reporte de alertas &middot; {fecha} (hora Chile)
+                  </div>
+                </td>
+                <td align="right" valign="top">
+                  <a href="{URL_APP}" style="font-family:monospace;font-size:11px;color:#0096a0;
+                     background:rgba(0,150,160,.15);border:1px solid rgba(0,150,160,.4);
+                     padding:6px 12px;border-radius:20px;text-decoration:none;white-space:nowrap;">
+                    Ver app ↗
+                  </a>
+                </td>
+              </tr>
+            </table>
           </td>
         </tr>
         <tr>
