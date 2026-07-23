@@ -146,6 +146,12 @@
 
 <script>
 /* ---------- Cobertura y umbrales (edítalos libremente) ---------- */
+// Servidor propio (api.py desplegado en Render) que centraliza las
+// consultas a Open-Meteo — evita que cada persona que abre esta app
+// consulte directo y choque con el límite por IP compartida en redes
+// corporativas. Reemplaza esto con tu URL real una vez desplegado.
+const API_BASE = "https://TU-SERVICIO.onrender.com";
+
 const UMBRAL = { viento:40, rafaga:60, precip:50, tempMin:-3, ola:2.0 };  // km/h, km/h, mm/24h, °C, m
 const OVERRIDE = {};
 // Override de umbrales por región completa (se aplica antes que OVERRIDE
@@ -286,41 +292,22 @@ function esTormenta(code){ return [95,96,99].includes(code); }
 /* ---------- Evaluación de una comuna contra sus umbrales ---------- */
 function evaluar(nombre, d, region){
   const u = umbralDe(nombre, region);
-  const viento  = d.current?.wind_speed_10m;
-  const rafaga  = d.current?.wind_gusts_10m;
-  const tempActual = d.current?.temperature_2m;
-  const humedad = d.current?.relative_humidity_2m;
-  const sensacion = d.current?.apparent_temperature;
-  const codigoActual = d.current?.weather_code;
-  const precip = d.daily?.precipitation_sum?.[0];
-  const nieve  = d.daily?.snowfall_sum?.[0];
-  const tmin   = d.daily?.temperature_2m_min?.[0];
-  const tmax   = d.daily?.temperature_2m_max?.[0];
-  const ola    = d.olaMax;  // se agrega aparte, viene de la API marina (ver cargarMarino)
+  const viento  = d.viento_kmh;
+  const rafaga  = d.rafagas_kmh;
+  const tempActual = d.temp_actual_c;
+  const humedad = d.humedad;
+  const sensacion = d.sensacion_c;
+  const codigoActual = d.codigo_actual;
+  const precip = d.precipitacion_24h_mm;
+  const tmin   = d.tmin_dia_c;
+  const tmax   = d.tmax_dia_c;
+  const ola    = d.altura_ola_max_m ?? d.altura_ola_actual_m;
 
-  // Próximas horas: busca el índice horario actual dentro del arreglo y
-  // toma las siguientes 6 horas para la franja visual (con forecast_days=2
-  // siempre hay margen), y las próximas 12h para la mínima "hacia adelante".
-  let proximasHoras = [];
-  let tminPrevista = null;
-  if(d.hourly?.time){
-    const ahora = new Date();
-    let idx = d.hourly.time.findIndex(t => new Date(t) >= ahora);
-    if(idx < 0) idx = 0;
-    for(let i = idx; i < Math.min(idx + 6, d.hourly.time.length); i++){
-      proximasHoras.push({
-        hora: new Date(d.hourly.time[i]).getHours(),
-        temp: d.hourly.temperature_2m?.[i],
-        codigo: d.hourly.weather_code?.[i],
-      });
-    }
-    // Mínima SOLO entre las horas que faltan (nunca las ya pasadas), para
-    // que la alerta de helada se caiga sola cuando el frío ya ocurrió y
-    // no se pronostica que continúe.
-    const ventana = d.hourly.temperature_2m?.slice(idx, idx + 12).filter(t => t != null) || [];
-    tminPrevista = ventana.length ? Math.min(...ventana) : null;
-  }
-  const tormentaProxima = proximasHoras.some(h => esTormenta(h.codigo)) || esTormenta(codigoActual);
+  // Próximas horas y mínima "hacia adelante": ya vienen calculadas por el
+  // servidor (fetch_datos_consenso), no hace falta procesarlas acá.
+  const proximasHoras = d.proximas_horas || [];
+  const tminPrevista = d.temp_min_prevista_c;
+  const tormentaProxima = !!d.tormenta_proxima;
 
   const motivos = [];
   let countAmarillas = 0;   // cuenta viento/ráfaga/lluvia/oleaje activas (NO la helada)
@@ -366,7 +353,7 @@ function evaluar(nombre, d, region){
   else if (countAmarillas >= 1) estado = "amarilla";
   // si solo hayHelada (sin nada más), estado se queda en "verde" -> informativa
 
-  return { estado, motivos, tempActual, viento, rafaga, humedad, sensacion, precip, nieve, tmin, tmax,
+  return { estado, motivos, tempActual, viento, rafaga, humedad, sensacion, precip, tmin, tmax,
            codigoActual, proximasHoras, ola };
 }
 
@@ -418,92 +405,16 @@ async function cargar(){
   btn.disabled = true; btn.textContent = "Actualizando…";
   document.getElementById("updated").textContent = "Consultando…";
 
-  const lats = TODAS.map(c => c.lat).join(",");
-  const lons = TODAS.map(c => c.lon).join(",");
-
-  const urlBase = `https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lons}`
-            + `&current=temperature_2m,relative_humidity_2m,apparent_temperature,wind_speed_10m,wind_gusts_10m,weather_code`
-            + `&hourly=temperature_2m,weather_code,precipitation,snowfall`
-            + `&daily=precipitation_sum,snowfall_sum,temperature_2m_min,temperature_2m_max,wind_gusts_10m_max`
-            + `&timezone=America/Santiago&forecast_days=2`;
-
-  // Segunda fuente: modelo explícito DWD ICON (linaje distinto al "best_match"
-  // por defecto), para tomar el peor caso de viento/ráfaga entre ambos.
-  const urlIcon = urlBase + `&models=icon_seamless`;
-
-  // Tercera fuente: ECMWF (el modelo europeo, uno de los más precisos a
-  // nivel global). Reemplaza en la práctica a yr.no para app.html: yr.no no
-  // puede consultarse desde el navegador (ver nota en README), pero yr.no
-  // en sí ya se apoya en datos de ECMWF fuera de la zona nórdica — así que
-  // esto da una fuente igual de sólida, sin llave y sin problemas de CORS.
-  const urlEcmwf = urlBase + `&models=ecmwf_ifs025`;
-
-  // Cuarta fuente, aparte: altura de olas/oleaje (Open-Meteo Marine API),
-  // relevante para operaciones en los centros de cultivo.
-  const urlMarino = `https://marine-api.open-meteo.com/v1/marine?latitude=${lats}&longitude=${lons}`
-            + `&daily=wave_height_max&timezone=America/Santiago&forecast_days=1`;
-
   try{
-    const [respBase, respIcon, respEcmwf, respMarino] = await Promise.all([
-      fetch(urlBase),
-      fetch(urlIcon).catch(() => null),
-      fetch(urlEcmwf).catch(() => null),
-      fetch(urlMarino).catch(() => null),
-    ]);
-    if(!respBase.ok) throw new Error("HTTP " + respBase.status);
-
-    let dataBase = await respBase.json();
-    if(!Array.isArray(dataBase)) dataBase = [dataBase];
-
-    let dataIcon = [];
-    if(respIcon?.ok){
-      dataIcon = await respIcon.json();
-      if(!Array.isArray(dataIcon)) dataIcon = [dataIcon];
-    }
-
-    let dataEcmwf = [];
-    if(respEcmwf?.ok){
-      dataEcmwf = await respEcmwf.json();
-      if(!Array.isArray(dataEcmwf)) dataEcmwf = [dataEcmwf];
-    }
-
-    let dataMarino = [];
-    if(respMarino?.ok){
-      dataMarino = await respMarino.json();
-      if(!Array.isArray(dataMarino)) dataMarino = [dataMarino];
-    }
+    const resp = await fetch(`${API_BASE}/api/datos`);
+    if(!resp.ok) throw new Error("HTTP " + resp.status);
+    const datos = await resp.json();
 
     // SENAPRED está desactivado a propósito: las alertas se generan
     // solo cuando un punto supera sus propios umbrales (viento, ráfagas,
-    // lluvia, nieve, helada, oleaje), no por alertas oficiales de la región/comuna.
-    TODAS.forEach((c,i) => {
-      const d = dataBase[i] || {};
-      const otrosModelos = [dataIcon[i], dataEcmwf[i]].filter(Boolean);
-
-      // Peor caso de viento/ráfaga entre los modelos disponibles.
-      for(const otro of otrosModelos){
-        if(!otro?.current) continue;
-        if(otro.current.wind_speed_10m != null)
-          d.current.wind_speed_10m = Math.max(d.current.wind_speed_10m ?? 0, otro.current.wind_speed_10m);
-        if(otro.current.wind_gusts_10m != null)
-          d.current.wind_gusts_10m = Math.max(d.current.wind_gusts_10m ?? 0, otro.current.wind_gusts_10m);
-      }
-
-      // Peor caso de temperatura horaria (la más baja de los 3 modelos en
-      // cada hora), para que la mínima "hacia adelante" de la helada
-      // considere el consenso completo, no solo el modelo base.
-      if(d.hourly?.temperature_2m){
-        for(const otro of otrosModelos){
-          const tempsOtro = otro?.hourly?.temperature_2m;
-          if(!tempsOtro) continue;
-          d.hourly.temperature_2m = d.hourly.temperature_2m.map((t, idx) =>
-            tempsOtro[idx] != null && (t == null || tempsOtro[idx] < t) ? tempsOtro[idx] : t
-          );
-        }
-      }
-
-      d.olaMax = dataMarino[i]?.daily?.wave_height_max?.[0] ?? null;
-
+    // lluvia, helada, oleaje), no por alertas oficiales de la región/comuna.
+    TODAS.forEach((c) => {
+      const d = datos[c.nombre] || {};
       c.eval = evaluar(c.nombre, d, c.region);
       c.oficial = null;
     });
@@ -516,7 +427,9 @@ async function cargar(){
       `<div class="error">No se pudo obtener el clima (${e.message}).<br><br>
       Si estás viendo esto dentro de una vista previa (por ejemplo la app de Claude),
       esa vista bloquea las conexiones externas. Abre este archivo en tu navegador
-      (Safari o Chrome) y funcionará. Luego toca Actualizar.</div>`;
+      (Safari o Chrome) y funcionará. Luego toca Actualizar.<br><br>
+      Si el problema persiste, puede que el servidor (Render) esté "dormido" tras
+      un rato sin uso — espera unos 30 segundos y toca Actualizar de nuevo.</div>`;
     document.getElementById("updated").textContent = "Sin conexión";
   }finally{
     btn.disabled = false; btn.textContent = "Actualizar";
