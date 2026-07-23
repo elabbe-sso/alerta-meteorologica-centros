@@ -22,6 +22,7 @@ from fuentes import fetch_datos_consenso, fetch_alertas_senapred
 from reglas import evaluar_umbrales, formatear_alertas_oficiales
 from reporte import generar_asunto, generar_cuerpo_texto, generar_cuerpo_html
 from notificadores import enviar_email, enviar_whatsapp
+from estado import ya_fue_enviada, marcar_enviada
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("alertas-meteo-sur")
@@ -132,21 +133,23 @@ def recolectar_alertas() -> list[dict]:
     return todas_las_alertas
 
 
-def es_hora_de_enviar(ahora: datetime) -> bool:
+def slot_programado(ahora: datetime) -> tuple[int, int] | None:
     """
-    True si estamos dentro de los 15 minutos SIGUIENTES a uno de los
-    horarios programados (ej. si el horario es 7:30, dispara entre 7:30 y
-    7:44). Ese margen es porque GitHub Actions no garantiza el minuto
-    exacto de un cron — puede atrasarse unos minutos. 15 min alcanza para
-    absorber ese atraso sin traslaparse con el siguiente chequeo (cada 30
-    min), así el reporte se envía una sola vez por horario.
+    Devuelve el horario de HORAS_ENVIO que coincide con "ahora" (dentro de
+    los 15 minutos siguientes a ese horario), o None si no coincide con
+    ninguno. Ese margen es porque GitHub Actions no garantiza el minuto
+    exacto de un cron — puede atrasarse unos minutos.
     """
     minutos_ahora = ahora.hour * 60 + ahora.minute
     for hora, minuto in HORAS_ENVIO:
         objetivo = hora * 60 + minuto
         if 0 <= (minutos_ahora - objetivo) < 15:
-            return True
-    return False
+            return (hora, minuto)
+    return None
+
+
+def es_hora_de_enviar(ahora: datetime) -> bool:
+    return slot_programado(ahora) is not None
 
 
 def notificar(alertas: list[dict]) -> None:
@@ -156,14 +159,30 @@ def notificar(alertas: list[dict]) -> None:
     mensaje de "sin novedades" si no hay ninguna. Solo se envía si estamos
     dentro de uno de los HORAS_ENVIO — fuera de esos horarios, no se manda
     nada (el chequeo de datos igual corre, solo el envío queda pausado).
+
+    Como hay DOS disparadores independientes (el cron interno de GitHub y
+    cron-job.org, como respaldo), ambos pueden caer dentro de la misma
+    ventana de 15 min de un mismo horario — sin este chequeo, mandarían el
+    reporte dos veces. `estado.py` recuerda "ya se envió el reporte de las
+    14:00 de hoy" para que el segundo disparador no repita el envío.
     """
     ahora = datetime.now(ZoneInfo("America/Santiago"))
+    slot = slot_programado(ahora)
 
-    if not es_hora_de_enviar(ahora):
+    if slot is None:
         horarios_legibles = ", ".join(f"{h:02d}:{m:02d}" for h, m in HORAS_ENVIO)
         log.info(
             "Son las %s (Chile) — fuera de los horarios de envío (%s). No se manda correo.",
             ahora.strftime("%H:%M"), horarios_legibles,
+        )
+        return
+
+    clave_envio = f"reporte-{ahora.date().isoformat()}-{slot[0]:02d}{slot[1]:02d}"
+    if ya_fue_enviada(clave_envio):
+        log.info(
+            "El reporte de las %02d:%02d de hoy ya se envió (probablemente por el otro "
+            "disparador, GitHub o cron-job.org). No se manda de nuevo.",
+            slot[0], slot[1],
         )
         return
 
@@ -192,6 +211,7 @@ def notificar(alertas: list[dict]) -> None:
                 }
             enviar_whatsapp(DESTINATARIOS_WHATSAPP, resumen)
 
+        marcar_enviada(clave_envio)
         log.info("Reporte enviado correctamente.")
 
     except Exception:
