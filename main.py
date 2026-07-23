@@ -207,7 +207,7 @@ def notificar(alertas: list[dict]) -> None:
                 resumen = {
                     "color": "amarilla",
                     "comuna": f"{len(alertas)} ubicaciones",
-                    "mensaje": "Revisa tu correo o el dashboard para el detalle.",
+                    "mensaje": "Revisa tu correo o la app para el detalle.",
                 }
             enviar_whatsapp(DESTINATARIOS_WHATSAPP, resumen)
 
