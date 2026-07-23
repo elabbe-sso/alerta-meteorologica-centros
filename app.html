@@ -181,7 +181,7 @@ const COMUNAS_POR_REGION = {
 const PUNTOS_ESPECIFICOS = [
   ["Abtao", -41.79944, -73.36083, "Los Lagos", "Calbuco"],
   ["Acopio Chinquihue", -41.51607, -73.02722, "Los Lagos", "Puerto Montt"],
-  ["Acopio Puerto Fernández", -42.1475, -73.48111, "Los Lagos", "Quemchi"],
+  ["Acopio Quemchi", -42.1475, -73.48111, "Los Lagos", "Quemchi"],
   ["Aguantao", -42.52, -73.58583, "Los Lagos", "Castro"],
   ["Aldunate", -44.3275, -72.89833, "Aysén", "Puerto Cisnes"],
   ["Aulen", -41.85068, -72.81142, "Los Lagos", "Hornopirén"],
@@ -405,8 +405,17 @@ async function cargar(){
   btn.disabled = true; btn.textContent = "Actualizando…";
   document.getElementById("updated").textContent = "Consultando…";
 
+  // Si el servidor (Render) estaba "dormido" por falta de uso, la primera
+  // consulta puede tardar bastante en responder (sin fallar, solo lenta) —
+  // avisamos esto si no hay respuesta después de unos segundos, para que
+  // no parezca que la app quedó pegada.
+  const avisoDespertar = setTimeout(() => {
+    document.getElementById("updated").textContent = "El servidor puede estar despertando… puede tardar hasta 50 seg";
+  }, 6000);
+
   try{
     const resp = await fetch(`${API_BASE}/api/datos`);
+    clearTimeout(avisoDespertar);
     if(!resp.ok) throw new Error("HTTP " + resp.status);
     const datos = await resp.json();
 
@@ -423,6 +432,7 @@ async function cargar(){
     const hora = new Date().toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"});
     document.getElementById("updated").textContent = "Actualizado " + hora;
   }catch(e){
+    clearTimeout(avisoDespertar);
     document.getElementById("contenido").innerHTML =
       `<div class="error">No se pudo obtener el clima (${e.message}).<br><br>
       Si estás viendo esto dentro de una vista previa (por ejemplo la app de Claude),
