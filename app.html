@@ -597,7 +597,7 @@ function render(){
       html += `<div class="card ${est}">
         <div class="top">
           <span class="wx-icon">${iconoClima(ev.codigoActual)}</span>
-          <span class="name">${c.nombre}${c.esPunto ? ' <span style="color:var(--muted);font-weight:400;font-size:11px">· centro</span>' : ''}${ev.tempActual!=null ? ` <span style="color:var(--ink);font-weight:400;">· ${Math.round(ev.tempActual)}°C</span>` : ''}</span>
+          <span class="name">${c.nombre}${c.esPunto ? ' <span style="color:var(--muted);font-weight:400;font-size:11px">· centro</span>' : ''}${ev.tempActual!=null ? ` <span style="color:var(--ink);font-weight:400;">🌡️ ${Math.round(ev.tempActual)}°C</span>` : ''}</span>
           ${badge}
         </div>
         ${c.comuna ? `<div style="font-size:11px;color:var(--muted);margin-top:-2px;">${c.comuna}, ${c.region}</div>` : ''}
