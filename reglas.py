@@ -36,6 +36,8 @@ def evaluar_umbrales(comuna: str, datos: dict, umbrales: dict, usar_pronostico_v
             "comuna": comuna,
             "tipo": "viento",
             "nivel": "propia",
+            "valor": viento,
+            "umbral": umbrales["viento_kmh"],
             "mensaje": f"{etiqueta_viento} de {viento} km/h en {comuna}.",
         })
 
@@ -44,6 +46,8 @@ def evaluar_umbrales(comuna: str, datos: dict, umbrales: dict, usar_pronostico_v
             "comuna": comuna,
             "tipo": "rafagas",
             "nivel": "propia",
+            "valor": rafagas,
+            "umbral": umbrales["rafagas_kmh"],
             "mensaje": f"{etiqueta_rafagas} de {rafagas} km/h en {comuna}.",
         })
 
@@ -53,6 +57,8 @@ def evaluar_umbrales(comuna: str, datos: dict, umbrales: dict, usar_pronostico_v
             "comuna": comuna,
             "tipo": "precipitacion",
             "nivel": "propia",
+            "valor": precip,
+            "umbral": umbrales["precipitacion_24h_mm"],
             "mensaje": f"Agua caída de {precip} mm en 24h en {comuna}.",
         })
 
@@ -77,6 +83,8 @@ def evaluar_umbrales(comuna: str, datos: dict, umbrales: dict, usar_pronostico_v
             "comuna": comuna,
             "tipo": "oleaje",
             "nivel": "propia",
+            "valor": ola,
+            "umbral": umbrales["altura_ola_m"],
             "mensaje": f"Oleaje de {ola} m en {comuna}.",
         })
 
