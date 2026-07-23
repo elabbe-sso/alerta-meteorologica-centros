@@ -435,11 +435,12 @@ async function cargar(){
     clearTimeout(avisoDespertar);
     document.getElementById("contenido").innerHTML =
       `<div class="error">No se pudo obtener el clima (${e.message}).<br><br>
-      Si estás viendo esto dentro de una vista previa (por ejemplo la app de Claude),
-      esa vista bloquea las conexiones externas. Abre este archivo en tu navegador
-      (Safari o Chrome) y funcionará. Luego toca Actualizar.<br><br>
-      Si el problema persiste, puede que el servidor (Render) esté "dormido" tras
-      un rato sin uso — espera unos 30 segundos y toca Actualizar de nuevo.</div>`;
+      <strong>Prueba primero tocar "Actualizar" de nuevo</strong> — si el servidor
+      recién estaba despertando, ya debería estar listo y la próxima consulta
+      suele funcionar al toque.<br><br>
+      Si sigue sin funcionar y estás viendo esto dentro de una vista previa
+      (por ejemplo la app de Claude), esa vista bloquea las conexiones externas
+      — abre este archivo en tu navegador (Safari o Chrome) en su lugar.</div>`;
     document.getElementById("updated").textContent = "Sin conexión";
   }finally{
     btn.disabled = false; btn.textContent = "Actualizar";
