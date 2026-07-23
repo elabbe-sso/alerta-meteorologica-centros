@@ -26,21 +26,51 @@ cuando corresponde. Incluye además una app web de monitoreo en vivo.
   - Lluvia ≥ 50 mm/24h
   - Oleaje ≥ 2.0 m
   - Helada: mínima pronosticada ≤ -3°C (Los Lagos y Aysén) o ≤ -5°C (Magallanes), mirando **solo las próximas 12 horas hacia adelante** (nunca horas ya pasadas — ver detalle abajo)
-  - Tormenta eléctrica: código de clima 95/96/99 detectado ahora o en las próximas 6 horas
+  - Tormenta eléctrica: código de clima 95/96/99 detectado ahora o en las próximas 6 horas (cuenta como una condición amarilla más — ver reglas de severidad abajo)
 - **Notificación por email — reporte en horarios fijos**: el chequeo de datos
-  corre cada vez que el workflow se dispara (cada 30 min), pero el correo
+  corre cada vez que el workflow se dispara, pero el correo
   solo se **arma y envía a las 7:30, 14:00 y 19:00** (hora de Chile,
-  configurable en `HORAS_ENVIO` de `main.py`). Cada envío es un **reporte
-  completo del estado actual** — no solo lo "nuevo" — agrupado por
-  severidad (rojas / amarillas / informativas). Si no hay ninguna alerta
-  activa, igual se manda un correo confirmando que todo está normal, para
-  que el silencio no se confunda con que el sistema dejó de funcionar. El
-  correo es HTML (con una versión en texto plano de respaldo automático).
-  El remitente puede mostrar un nombre visible (no solo el correo pelado)
-  configurando el secret opcional `SMTP_FROM_NAME`.
+  configurable en `HORAS_ENVIO` de `main.py`). El disparo puntual usa dos
+  vías redundantes: el cron interno de GitHub Actions (`.github/workflows/alertas.yml`,
+  en minutos `:07`/`:37` para evitar la congestión de GitHub en `:00`/`:30`)
+  y, como respaldo más confiable, 3 tareas programadas en cron-job.org que
+  llaman directamente a la API de GitHub a la hora exacta de cada envío.
+  Cada envío es un **reporte completo del estado actual** — no solo lo
+  "nuevo" — agrupado por severidad (rojas / amarillas / informativas). Si
+  no hay ninguna alerta activa, igual se manda un correo confirmando que
+  todo está normal, para que el silencio no se confunda con que el sistema
+  dejó de funcionar. El correo es HTML (con una versión en texto plano de
+  respaldo automático). El remitente puede mostrar un nombre visible (no
+  solo el correo pelado) configurando el secret opcional `SMTP_FROM_NAME`.
 - **`app.html`**: buscador, ícono de clima, temperatura actual, pronóstico de
   próximas 6h, chips de resumen clicables (filtran por color), enlace
   destacado a "Estados de Puerto" (ver abajo).
+
+## Reglas de severidad (color) — idénticas en `app.html` y el correo
+
+El color final de cada centro (roja/amarilla/informativa) se calcula igual
+en ambos lados (`app.html` y `reporte.py`/`reglas.py`), no por el tipo
+individual de cada condición sino por esta tabla:
+
+| Situación | Color |
+|---|---|
+| Solo helada | Verde (informativa) |
+| 1 sola condición amarilla (viento, ráfaga, lluvia, oleaje, o tormenta) | Amarilla |
+| Helada + 1 amarilla | Amarilla (la helada nunca cuenta para el "2 o más") |
+| 2 o más amarillas juntas (la tormenta cuenta como una más) | Roja |
+| Cualquier condición al 30% o más sobre su umbral, aunque sea única | Roja |
+| Nada activo | Verde (sin alerta) |
+
+Para que el correo pueda calcular el 30% extremo, `reglas.py` incluye el
+`valor` y `umbral` numérico de cada alerta (no solo el mensaje ya armado).
+El dashboard en vivo (`api.py`) no aplica este escalamiento — sigue usando
+solo el color por tipo individual, ya que ahí no hay concepto de "reporte
+consolidado" por centro.
+
+Cuando una categoría (rojas/amarillas/informativas) llega a **10 o más
+centros**, el correo la condensa en una lista de nombres en vez de una
+tarjeta de detalle por cada uno — para que no se vuelva eterno de leer
+(`UMBRAL_CONDENSAR` en `reporte.py`). Las rojas nunca se condensan.
 
 ## Viento y ráfagas en el correo — pronóstico dinámico, no el dato actual
 
