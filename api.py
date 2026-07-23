@@ -1,102 +1,100 @@
 """
-API mínima que conecta el motor de alertas con el dashboard.
+API que centraliza las consultas a Open-Meteo para app.html.
 
-Expone dos cosas:
-  GET /api/alertas   -> JSON { "Abtao": "roja", "Calen 1": "amarilla", ... }
-                        (una entrada por cada punto específico monitoreado)
-  GET /              -> sirve el propio dashboard.html
+Por qué existe: si cada persona que abre app.html consulta Open-Meteo
+directo desde su navegador, en una red corporativa (donde todos los
+empleados comparten la misma IP pública de salida) el volumen combinado
+puede superar el límite de Open-Meteo (600 llamadas/min, 5.000/hora,
+10.000/día POR IP) y todos empiezan a recibir error 429 "Too Many
+Requests" — no solo quien lo satura.
 
-El color por punto se deriva combinando:
-  - las alertas propias por umbral (Open-Meteo + yr.no), y
-  - las alertas oficiales de SENAPRED, aplicadas con esta regla:
-      * si la alerta trae una COMUNA específica, solo eleva el color de los
-        puntos vinculados a ESA comuna (nunca a toda la región);
-      * si la alerta NO trae comuna (una ATP genuinamente regional), ahí sí
-        se aplica a todos los puntos de esa región.
+La solución: este servidor consulta Open-Meteo UNA sola vez cada 15
+minutos (con la IP del servidor, no la de cada usuario) para los 67
+puntos, guarda el resultado en memoria, y se lo sirve a quien lo pida.
+Así, sin importar si son 5 o 500 personas viendo la app a la vez,
+Open-Meteo solo ve las llamadas de este servidor.
 
-Ejecutar:
-    pip install flask
-    python api.py
-    # abre http://localhost:5000
+Se despliega en Render.com (gratis) — ver README.md para instrucciones.
 """
 
 from __future__ import annotations
-from pathlib import Path
-from flask import Flask, jsonify, send_file
+import os
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from config import PUNTOS_ESPECIFICOS, obtener_umbrales_punto
-from fuentes import fetch_datos_consenso, fetch_alertas_senapred
-from reglas import evaluar_umbrales
+from flask import Flask, jsonify
+
+from config import PUNTOS_ESPECIFICOS
+from fuentes import fetch_datos_consenso
 
 app = Flask(__name__)
-AQUI = Path(__file__).parent
+
+# Cuántos puntos se consultan en paralelo al refrescar el caché (mismo
+# criterio que main.py: red, no CPU, así que paralelizar ayuda mucho).
+MAX_HILOS = 12
+
+# Cada cuánto se refresca el caché. Con app.html actualizándose sola cada
+# 15 min, no hace falta refrescar más seguido que eso.
+CACHE_TTL_SEGUNDOS = 15 * 60
+
+_cache_lock = threading.Lock()
+_cache: dict = {"datos": {}, "actualizado_en": 0.0}
 
 
-# Mapea el tipo de alerta propia a un color estilo SENAPRED.
-# Ajusta la severidad según tu criterio operativo.
-SEVERIDAD = {
-    "viento": "amarilla",
-    "rafagas": "amarilla",
-    "precipitacion": "amarilla",
-    "helada": "verde",
-    "oleaje": "amarilla",
-    "tormenta": "roja",
-}
-ORDEN = {"verde": 1, "amarilla": 2, "roja": 3}
+def _obtener_datos_de_un_punto(punto: tuple) -> tuple[str, dict]:
+    nombre, lat, lon, comuna, region = punto
+    try:
+        datos = fetch_datos_consenso(lat, lon, horas_viento=12)
+        datos["comuna"] = comuna
+        datos["region"] = region
+        datos["lat"] = lat
+        datos["lon"] = lon
+        return nombre, datos
+    except Exception as e:
+        return nombre, {"error": str(e)}
 
 
-def color_por_comuna() -> dict:
-    resultado = {}
-
-    # 1. Alertas propias por umbral, evaluadas en las coordenadas exactas
-    #    de cada punto (no en el centro de ninguna comuna).
-    for nombre, lat, lon, comuna, region in PUNTOS_ESPECIFICOS:
-        try:
-            datos = fetch_datos_consenso(lat, lon)
-            alertas = evaluar_umbrales(nombre, datos, obtener_umbrales_punto(nombre))
-        except Exception:
-            alertas = []
-        colores = [SEVERIDAD.get(a["tipo"], "amarilla") for a in alertas]
-        if colores:
-            resultado[nombre] = max(colores, key=lambda c: ORDEN[c])
-
-    # 2. Alertas oficiales de SENAPRED: DESACTIVADAS a propósito, igual que
-    #    en main.py. El dashboard solo colorea por umbral propio. Para
-    #    reactivar SENAPRED, descomenta este bloque.
-    #
-    # regiones = sorted({p[4] for p in PUNTOS_ESPECIFICOS})
-    # for region in regiones:
-    #     try:
-    #         oficiales = fetch_alertas_senapred(region)
-    #     except Exception:
-    #         oficiales = []
-    #     for alerta in oficiales:
-    #         comuna_alerta = alerta.get("comuna")
-    #         color = alerta.get("color") or "amarilla"
-    #         for nombre, lat, lon, comuna, reg in PUNTOS_ESPECIFICOS:
-    #             if reg != region:
-    #                 continue
-    #             # Con comuna específica: solo aplica a esa comuna.
-    #             # Sin comuna (ATP genuinamente regional): aplica a toda la región.
-    #             aplica = (comuna_alerta == comuna) if comuna_alerta else True
-    #             if not aplica:
-    #                 continue
-    #             actual = resultado.get(nombre)
-    #             if actual is None or ORDEN.get(color, 2) > ORDEN.get(actual, 0):
-    #                 resultado[nombre] = color
-
-    return resultado
+def _refrescar_cache() -> None:
+    resultado: dict = {}
+    with ThreadPoolExecutor(max_workers=MAX_HILOS) as executor:
+        futuros = [executor.submit(_obtener_datos_de_un_punto, p) for p in PUNTOS_ESPECIFICOS]
+        for futuro in as_completed(futuros):
+            nombre, datos = futuro.result()
+            resultado[nombre] = datos
+    _cache["datos"] = resultado
+    _cache["actualizado_en"] = time.time()
 
 
-@app.route("/api/alertas")
-def api_alertas():
-    return jsonify(color_por_comuna())
+def _cache_vigente() -> bool:
+    return (time.time() - _cache["actualizado_en"]) < CACHE_TTL_SEGUNDOS
+
+
+@app.after_request
+def _agregar_cors(response):
+    # app.html vive en GitHub Pages (otro dominio), así que el navegador
+    # necesita este header para no bloquear la respuesta por CORS.
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    return response
+
+
+@app.route("/api/datos")
+def api_datos():
+    with _cache_lock:
+        if not _cache_vigente():
+            _refrescar_cache()
+    return jsonify(_cache["datos"])
 
 
 @app.route("/")
-def dashboard():
-    return send_file(AQUI / "dashboard.html")
+def estado():
+    return jsonify({
+        "status": "ok",
+        "puntos_monitoreados": len(PUNTOS_ESPECIFICOS),
+        "cache_actualizado_hace_segundos": round(time.time() - _cache["actualizado_en"]),
+    })
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    puerto = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=puerto)
