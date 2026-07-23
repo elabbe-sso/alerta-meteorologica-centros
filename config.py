@@ -85,7 +85,7 @@ def obtener_umbrales(comuna: str) -> dict:
 PUNTOS_ESPECIFICOS = [
     ("Abtao", -41.79944, -73.36083, "Calbuco", "Los Lagos"),
     ("Acopio Chinquihue", -41.51607, -73.02722, "Puerto Montt", "Los Lagos"),
-    ("Acopio Puerto Fernández", -42.1475, -73.48111, "Quemchi", "Los Lagos"),
+    ("Acopio Quemchi", -42.1475, -73.48111, "Quemchi", "Los Lagos"),
     ("Aguantao", -42.52, -73.58583, "Castro", "Los Lagos"),
     ("Aldunate", -44.3275, -72.89833, "Puerto Cisnes", "Aysén"),
     ("Aulen", -41.85068, -72.81142, "Hornopirén", "Los Lagos"),
