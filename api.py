@@ -70,6 +70,26 @@ def _cache_vigente() -> bool:
     return (time.time() - _cache["actualizado_en"]) < CACHE_TTL_SEGUNDOS
 
 
+def _precalentar_cache_en_segundo_plano():
+    """
+    Se ejecuta apenas arranca el proceso (ver la llamada al final del
+    archivo, a nivel de módulo — así corre tanto con `python api.py` como
+    con gunicorn, que no ejecuta el bloque `if __name__ == "__main__"`).
+    Sin esto, la primera persona en consultar `/api/datos` después de que
+    el servidor esté dormido tendría que esperar el refresco completo (que
+    puede superar el límite de tiempo por defecto de Gunicorn y devolver
+    un error 502) — precalentando en segundo plano, para cuando llegue una
+    consulta real el caché ya debería estar listo.
+    """
+    try:
+        _refrescar_cache()
+    except Exception:
+        pass  # si falla al arrancar, /api/datos lo vuelve a intentar solo
+
+
+threading.Thread(target=_precalentar_cache_en_segundo_plano, daemon=True).start()
+
+
 @app.after_request
 def _agregar_cors(response):
     # app.html vive en GitHub Pages (otro dominio), así que el navegador
