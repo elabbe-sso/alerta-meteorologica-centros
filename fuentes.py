@@ -80,8 +80,9 @@ def fetch_datos_open_meteo(lat: float, lon: float, horas_viento: int = 12) -> di
     params = {
         "latitude": lat,
         "longitude": lon,
-        "current": "temperature_2m,wind_speed_10m,wind_gusts_10m,snowfall,weather_code",
+        "current": "temperature_2m,wind_speed_10m,wind_gusts_10m,snowfall,weather_code,relative_humidity_2m,apparent_temperature",
         "hourly": "precipitation,snowfall,temperature_2m,wind_speed_10m,wind_gusts_10m,weather_code",
+        "daily": "temperature_2m_min,temperature_2m_max",
         "timezone": "America/Santiago",
         "forecast_days": 2,
         "past_days": 1,
@@ -92,6 +93,7 @@ def fetch_datos_open_meteo(lat: float, lon: float, horas_viento: int = 12) -> di
 
     current = data.get("current", {})
     hourly = data.get("hourly", {})
+    daily = data.get("daily", {})
     horas = hourly.get("time", [])
 
     # Últimas 24h reales (desde "ahora" hacia atrás) — ya no es simplemente
@@ -111,10 +113,25 @@ def fetch_datos_open_meteo(lat: float, lon: float, horas_viento: int = 12) -> di
         or any(c in CODIGOS_TORMENTA for c in codigos_futuros)
     )
 
+    # Franja de próximas 6 horas (solo informativo, para mostrar en la app/API).
+    proximas_horas = []
+    for i in range(idx_ahora, min(idx_ahora + 6, len(horas))):
+        proximas_horas.append({
+            "hora": datetime.fromisoformat(horas[i]).hour,
+            "temp": hourly.get("temperature_2m", [None] * len(horas))[i],
+            "codigo": hourly.get("weather_code", [None] * len(horas))[i],
+        })
+
     return {
         "fuente": "open-meteo",
         "timestamp": current.get("time"),
         "temp_actual_c": current.get("temperature_2m"),
+        "humedad": current.get("relative_humidity_2m"),
+        "sensacion_c": current.get("apparent_temperature"),
+        "codigo_actual": current.get("weather_code"),
+        "tmin_dia_c": (daily.get("temperature_2m_min") or [None])[0],
+        "tmax_dia_c": (daily.get("temperature_2m_max") or [None])[0],
+        "proximas_horas": proximas_horas,
         "temp_min_prevista_c": _extremo_prevista(horas, hourly.get("temperature_2m", []), HORAS_VENTANA_HELADA, min),
         "viento_kmh": current.get("wind_speed_10m"),
         "rafagas_kmh": current.get("wind_gusts_10m"),
@@ -371,6 +388,18 @@ def fetch_datos_consenso(lat: float, lon: float, horas_viento: int = 12) -> dict
         "nieve_cm_24h": combinar("nieve_cm_24h"),
         "tormenta_proxima": combinar("tormenta_proxima"),  # True si cualquier fuente la detecta
     }
+
+    # Campos de solo visualización (humedad, sensación térmica, mín/máx del
+    # día, pronóstico por horas): se toman del modelo Open-Meteo base
+    # únicamente, no se combinan entre fuentes — son informativos, no
+    # entran en el cálculo de ninguna alerta.
+    om = next((d for d in fuentes_datos if d.get("fuente") == "open-meteo"), None)
+    resultado["humedad"] = om.get("humedad") if om else None
+    resultado["sensacion_c"] = om.get("sensacion_c") if om else None
+    resultado["codigo_actual"] = om.get("codigo_actual") if om else None
+    resultado["tmin_dia_c"] = om.get("tmin_dia_c") if om else None
+    resultado["tmax_dia_c"] = om.get("tmax_dia_c") if om else None
+    resultado["proximas_horas"] = om.get("proximas_horas") if om else []
 
     # Datos marinos: fuente separada, se agregan aparte (no hay "peor caso"
     # entre modelos acá todavía, solo Open-Meteo Marine).
