@@ -35,6 +35,10 @@ cuando corresponde. Incluye además una app web de monitoreo en vivo.
   en minutos `:07`/`:37` para evitar la congestión de GitHub en `:00`/`:30`)
   y, como respaldo más confiable, 3 tareas programadas en cron-job.org que
   llaman directamente a la API de GitHub a la hora exacta de cada envío.
+  Como ambos disparadores pueden caer dentro de la misma ventana de 15 min
+  de un mismo horario, `estado.py` (SQLite) registra "ya se envió el
+  reporte de las 14:00 de hoy" para que el segundo disparador no repita el
+  envío — sin este chequeo, llegarían dos correos idénticos por horario.
   Cada envío es un **reporte completo del estado actual** — no solo lo
   "nuevo" — agrupado por severidad (rojas / amarillas / informativas). Si
   no hay ninguna alerta activa, igual se manda un correo confirmando que
@@ -178,13 +182,6 @@ o `COBERTURA`, y `COMUNAS_POR_REGION`) para que todo quede sincronizado.
 
 Estas piezas están implementadas y funcionan si se activan, pero
 actualmente no influyen en ninguna alerta ni notificación:
-
-- **`estado.py`** (registro SQLite con ventana de 24h): dejó de usarse
-  cuando se pasó al modelo de reportes en horarios fijos — ahora cada
-  envío programado incluye TODAS las alertas activas en ese momento, no
-  solo las "nuevas" desde el último aviso, así que la deduplicación ya no
-  aplica. El archivo queda disponible por si en el futuro se quiere volver
-  a un modelo de notificación inmediata en vez de reportes por horario.
 
 - **Alertas oficiales de SENAPRED**: el código para consultar sus tres
   capas reales (verde/amarilla/roja) sigue en `fuentes.py` y funciona, pero
