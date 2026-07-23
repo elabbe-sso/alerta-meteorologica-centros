@@ -9,17 +9,6 @@ cuando no hay ninguna alerta activa.
 from __future__ import annotations
 from datetime import datetime
 
-# A qué color/severidad visual pertenece cada tipo de alerta, para agrupar
-# el reporte igual que en app.html / api.py.
-SEVERIDAD_TIPO = {
-    "tormenta": "roja",
-    "viento": "amarilla",
-    "rafagas": "amarilla",
-    "precipitacion": "amarilla",
-    "oleaje": "amarilla",
-    "helada": "verde",
-}
-
 COLOR_HEX = {"roja": "#e5484d", "amarilla": "#e3b341", "verde": "#3fb950"}
 TITULO_SEVERIDAD = {"roja": "Rojas", "amarilla": "Amarillas", "verde": "Informativas"}
 
@@ -50,29 +39,58 @@ def _extraer_condicion(mensaje: str, comuna: str) -> str:
     return mensaje.rstrip(".")
 
 
-def _agrupar_por_centro(alertas_color: list[dict]) -> list[tuple[str, list[str]]]:
+# Tipos que cuentan para el "2 o más" (la helada NUNCA cuenta acá).
+TIPOS_AMARILLOS = {"viento", "rafagas", "precipitacion", "oleaje", "tormenta"}
+
+
+def _agrupar_por_centro_y_severidad(alertas: list[dict]) -> dict[str, list[tuple[str, list[str]]]]:
     """
-    Agrupa las alertas de UNA severidad por nombre de centro, preservando
-    el orden de aparición. Devuelve una lista de (centro, [condiciones]).
+    Agrupa TODAS las alertas por centro y calcula la severidad FINAL de
+    cada uno con las mismas reglas que app.html (no por el tipo individual
+    de cada alerta por separado):
+      - Solo helada -> verde (informativa).
+      - 1 sola condición amarilla (viento/ráfaga/lluvia/oleaje/tormenta) -> amarilla.
+      - Helada + 1 amarilla -> amarilla (la helada nunca cuenta para el "2 o más").
+      - 2+ amarillas juntas (la tormenta cuenta como una más) -> roja.
+      - Cualquier condición al 30%+ sobre su umbral, aunque sea única -> roja.
     """
+    por_centro: dict[str, list[dict]] = {}
     orden: list[str] = []
-    mapa: dict[str, list[str]] = {}
-    for a in alertas_color:
-        comuna = a.get("comuna") or ""
-        condicion = _extraer_condicion(a["mensaje"], comuna)
-        if comuna not in mapa:
-            mapa[comuna] = []
-            orden.append(comuna)
-        mapa[comuna].append(condicion)
-    return [(c, mapa[c]) for c in orden]
-
-
-def _agrupar_por_severidad(alertas: list[dict]) -> dict[str, list[dict]]:
-    grupos: dict[str, list[dict]] = {"roja": [], "amarilla": [], "verde": []}
     for a in alertas:
-        color = SEVERIDAD_TIPO.get(a["tipo"], "amarilla")
-        grupos[color].append(a)
-    return grupos
+        comuna = a.get("comuna") or ""
+        if comuna not in por_centro:
+            por_centro[comuna] = []
+            orden.append(comuna)
+        por_centro[comuna].append(a)
+
+    resultado: dict[str, list[tuple[str, list[str]]]] = {"roja": [], "amarilla": [], "verde": []}
+    for comuna in orden:
+        count_amarillas = 0
+        es_roja = False
+        condiciones = []
+        for a in por_centro[comuna]:
+            condiciones.append(_extraer_condicion(a["mensaje"], comuna))
+            tipo = a["tipo"]
+            if tipo in TIPOS_AMARILLOS:
+                count_amarillas += 1
+                valor, umbral = a.get("valor"), a.get("umbral")
+                if valor is not None and umbral:
+                    if valor >= umbral * 1.3:
+                        es_roja = True
+
+        if count_amarillas >= 2:
+            es_roja = True
+
+        if es_roja:
+            color = "roja"
+        elif count_amarillas >= 1:
+            color = "amarilla"
+        else:
+            color = "verde"  # solo helada
+
+        resultado[color].append((comuna, condiciones))
+
+    return resultado
 
 
 def generar_asunto(alertas: list[dict], ahora: datetime) -> str:
@@ -84,12 +102,12 @@ def generar_cuerpo_texto(alertas: list[dict], ahora: datetime) -> str:
     if not alertas:
         return encabezado + "\n" + MENSAJE_SIN_ALERTAS + "\n"
 
-    grupos = _agrupar_por_severidad(alertas)
+    grupos = _agrupar_por_centro_y_severidad(alertas)
     partes = [encabezado]
     for color in ("roja", "amarilla", "verde"):
-        if not grupos[color]:
+        centros = grupos[color]
+        if not centros:
             continue
-        centros = _agrupar_por_centro(grupos[color])
         partes.append(f"\n--- {TITULO_SEVERIDAD[color]} ({len(centros)}) ---")
         if len(centros) >= UMBRAL_CONDENSAR:
             partes.append(", ".join(comuna for comuna, _ in centros))
@@ -109,13 +127,13 @@ def generar_cuerpo_html(alertas: list[dict], ahora: datetime) -> str:
             ✅ {MENSAJE_SIN_ALERTAS}
           </div>"""
     else:
-        grupos = _agrupar_por_severidad(alertas)
+        grupos = _agrupar_por_centro_y_severidad(alertas)
         secciones = []
         for color in ("roja", "amarilla", "verde"):
-            if not grupos[color]:
+            centros = grupos[color]
+            if not centros:
                 continue
             hex_color = COLOR_HEX[color]
-            centros = _agrupar_por_centro(grupos[color])
 
             if len(centros) >= UMBRAL_CONDENSAR:
                 # Muchos centros: se condensa en una sola lista de nombres,
