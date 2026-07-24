@@ -69,28 +69,12 @@ HORAS_VENTANA_TORMENTA = 6
 CODIGOS_TORMENTA = {95, 96, 99}
 
 
-def fetch_datos_open_meteo(lat: float, lon: float, horas_viento: int = 12) -> dict:
+def _parsear_respuesta_open_meteo(data: dict, horas_viento: int) -> dict:
     """
-    Consulta condiciones actuales + acumulados recientes para un punto.
-    `horas_viento`: cuántas horas hacia adelante mirar para el PEOR viento/
-    ráfaga previsto (normalmente, las horas que faltan hasta el próximo
-    envío programado — ver HORAS_ENVIO en main.py).
-    Devuelve un dict normalizado que usa el motor de reglas.
+    Parsea la respuesta de UNA ubicación de la API base de Open-Meteo
+    (mismo formato tanto si se consultó 1 punto como si esta ubicación es
+    parte de una respuesta en lote de varios puntos a la vez).
     """
-    params = {
-        "latitude": lat,
-        "longitude": lon,
-        "current": "temperature_2m,wind_speed_10m,wind_gusts_10m,snowfall,weather_code,relative_humidity_2m,apparent_temperature,wind_direction_10m",
-        "hourly": "precipitation,snowfall,temperature_2m,wind_speed_10m,wind_gusts_10m,weather_code",
-        "daily": "temperature_2m_min,temperature_2m_max",
-        "timezone": "America/Santiago",
-        "forecast_days": 2,
-        "past_days": 1,
-    }
-    resp = requests.get(OPEN_METEO_URL, params=params, timeout=15)
-    resp.raise_for_status()
-    data = resp.json()
-
     current = data.get("current", {})
     hourly = data.get("hourly", {})
     daily = data.get("daily", {})
@@ -142,6 +126,61 @@ def fetch_datos_open_meteo(lat: float, lon: float, horas_viento: int = 12) -> di
         "precipitacion_24h_mm": round(precip_24h, 1),
         "nieve_cm_24h": round(nieve_24h * 100, 1),  # open-meteo entrega cm ya, se deja explícito
     }
+
+
+_PARAMS_OPEN_METEO_BASE = {
+    "current": "temperature_2m,wind_speed_10m,wind_gusts_10m,snowfall,weather_code,relative_humidity_2m,apparent_temperature,wind_direction_10m",
+    "hourly": "precipitation,snowfall,temperature_2m,wind_speed_10m,wind_gusts_10m,weather_code",
+    "daily": "temperature_2m_min,temperature_2m_max",
+    "timezone": "America/Santiago",
+    "forecast_days": 2,
+    "past_days": 1,
+}
+
+
+def fetch_datos_open_meteo(lat: float, lon: float, horas_viento: int = 12) -> dict:
+    """
+    Consulta condiciones actuales + acumulados recientes para UN punto.
+    `horas_viento`: cuántas horas hacia adelante mirar para el PEOR viento/
+    ráfaga previsto (normalmente, las horas que faltan hasta el próximo
+    envío programado — ver HORAS_ENVIO en main.py).
+    Devuelve un dict normalizado que usa el motor de reglas.
+
+    Para MUCHOS puntos a la vez (ej. los 68 centros), usa
+    `fetch_datos_open_meteo_batch()` en su lugar -- una sola llamada HTTP
+    en vez de una por punto, evita agotar el límite de Open-Meteo
+    (600 llamadas/minuto) mucho más rápido de lo necesario.
+    """
+    params = {"latitude": lat, "longitude": lon, **_PARAMS_OPEN_METEO_BASE}
+    resp = requests.get(OPEN_METEO_URL, params=params, timeout=15)
+    resp.raise_for_status()
+    return _parsear_respuesta_open_meteo(resp.json(), horas_viento)
+
+
+def fetch_datos_open_meteo_batch(puntos: list[tuple[float, float]], horas_viento: int = 12) -> list[dict | None]:
+    """
+    Igual que `fetch_datos_open_meteo`, pero para VARIOS puntos en UNA sola
+    llamada HTTP (Open-Meteo soporta listas de lat/lon separadas por coma
+    en un solo request). Devuelve una lista en el MISMO ORDEN que `puntos`
+    (con `None` en la posición de cualquier punto que Open-Meteo no haya
+    podido resolver).
+    """
+    if not puntos:
+        return []
+    params = {
+        "latitude": ",".join(str(p[0]) for p in puntos),
+        "longitude": ",".join(str(p[1]) for p in puntos),
+        **_PARAMS_OPEN_METEO_BASE,
+    }
+    resp = requests.get(OPEN_METEO_URL, params=params, timeout=30)
+    resp.raise_for_status()
+    data = resp.json()
+    if not isinstance(data, list):
+        data = [data]  # Open-Meteo devuelve un dict pelado si solo hay 1 punto
+    return [
+        (_parsear_respuesta_open_meteo(d, horas_viento) if d else None)
+        for d in data
+    ]
 
 
 # ======================================================================
@@ -264,21 +303,8 @@ def fetch_datos_yr(lat: float, lon: float, horas_viento: int = 12) -> dict | Non
 # sumar una tercera fuente genuinamente independiente al consenso.
 # Mismo endpoint, mismo formato de respuesta, solo cambia &models=.
 # ======================================================================
-def fetch_datos_open_meteo_icon(lat: float, lon: float, horas_viento: int = 12) -> dict:
-    params = {
-        "latitude": lat,
-        "longitude": lon,
-        "current": "temperature_2m,wind_speed_10m,wind_gusts_10m,snowfall",
-        "hourly": "precipitation,snowfall,temperature_2m,wind_speed_10m,wind_gusts_10m",
-        "timezone": "America/Santiago",
-        "forecast_days": 2,
-        "past_days": 1,
-        "models": "icon_seamless",
-    }
-    resp = requests.get(OPEN_METEO_URL, params=params, timeout=15)
-    resp.raise_for_status()
-    data = resp.json()
-
+def _parsear_respuesta_icon(data: dict) -> dict:
+    """Parsea la respuesta de UNA ubicación del modelo DWD ICON."""
     current = data.get("current", {})
     hourly = data.get("hourly", {})
     horas = hourly.get("time", [])
@@ -293,14 +319,70 @@ def fetch_datos_open_meteo_icon(lat: float, lon: float, horas_viento: int = 12) 
         "fuente": "dwd-icon",
         "timestamp": current.get("time"),
         "temp_actual_c": current.get("temperature_2m"),
-        "temp_min_prevista_c": _extremo_prevista(horas, hourly.get("temperature_2m", []), HORAS_VENTANA_HELADA, min),
+        "temp_min_prevista_c": None,  # se completa por punto en fetch_datos_open_meteo_icon_batch
         "viento_kmh": current.get("wind_speed_10m"),
         "rafagas_kmh": current.get("wind_gusts_10m"),
-        "viento_max_prevista_kmh": _extremo_prevista(horas, hourly.get("wind_speed_10m", []), horas_viento, max),
-        "rafagas_max_prevista_kmh": _extremo_prevista(horas, hourly.get("wind_gusts_10m", []), horas_viento, max),
+        "viento_max_prevista_kmh": None,
+        "rafagas_max_prevista_kmh": None,
         "precipitacion_24h_mm": round(precip_24h, 1),
         "nieve_cm_24h": round(nieve_24h * 100, 1),
+        "_horas": horas,  # se usa internamente para calcular los "_max_prevista" con horas_viento
+        "_hourly": hourly,
     }
+
+
+def _completar_previstas_icon(parcial: dict, horas_viento: int) -> dict:
+    """Calcula los campos '_max_prevista'/'_min_prevista' (que dependen de
+    `horas_viento`, variable según cuándo es el próximo envío) y limpia los
+    campos internos usados solo para ese cálculo."""
+    horas = parcial.pop("_horas")
+    hourly = parcial.pop("_hourly")
+    parcial["temp_min_prevista_c"] = _extremo_prevista(horas, hourly.get("temperature_2m", []), HORAS_VENTANA_HELADA, min)
+    parcial["viento_max_prevista_kmh"] = _extremo_prevista(horas, hourly.get("wind_speed_10m", []), horas_viento, max)
+    parcial["rafagas_max_prevista_kmh"] = _extremo_prevista(horas, hourly.get("wind_gusts_10m", []), horas_viento, max)
+    return parcial
+
+
+_PARAMS_OPEN_METEO_ICON = {
+    "current": "temperature_2m,wind_speed_10m,wind_gusts_10m,snowfall",
+    "hourly": "precipitation,snowfall,temperature_2m,wind_speed_10m,wind_gusts_10m",
+    "timezone": "America/Santiago",
+    "forecast_days": 2,
+    "past_days": 1,
+    "models": "icon_seamless",
+}
+
+
+def fetch_datos_open_meteo_icon(lat: float, lon: float, horas_viento: int = 12) -> dict:
+    """Consulta el modelo DWD ICON para UN punto. Para varios puntos a la
+    vez, usa `fetch_datos_open_meteo_icon_batch()` (1 sola llamada HTTP)."""
+    params = {"latitude": lat, "longitude": lon, **_PARAMS_OPEN_METEO_ICON}
+    resp = requests.get(OPEN_METEO_URL, params=params, timeout=15)
+    resp.raise_for_status()
+    parcial = _parsear_respuesta_icon(resp.json())
+    return _completar_previstas_icon(parcial, horas_viento)
+
+
+def fetch_datos_open_meteo_icon_batch(puntos: list[tuple[float, float]], horas_viento: int = 12) -> list[dict | None]:
+    """Igual que `fetch_datos_open_meteo_icon`, pero para VARIOS puntos en
+    UNA sola llamada HTTP -- ver `fetch_datos_open_meteo_batch` para el
+    motivo (evitar agotar el límite de 600 llamadas/minuto de Open-Meteo)."""
+    if not puntos:
+        return []
+    params = {
+        "latitude": ",".join(str(p[0]) for p in puntos),
+        "longitude": ",".join(str(p[1]) for p in puntos),
+        **_PARAMS_OPEN_METEO_ICON,
+    }
+    resp = requests.get(OPEN_METEO_URL, params=params, timeout=30)
+    resp.raise_for_status()
+    data = resp.json()
+    if not isinstance(data, list):
+        data = [data]
+    return [
+        (_completar_previstas_icon(_parsear_respuesta_icon(d), horas_viento) if d else None)
+        for d in data
+    ]
 
 
 # ======================================================================
@@ -315,30 +397,54 @@ def fetch_datos_open_meteo_icon(lat: float, lon: float, horas_viento: int = 12) 
 MARINE_URL = "https://marine-api.open-meteo.com/v1/marine"
 
 
-def fetch_datos_marino(lat: float, lon: float) -> dict:
-    params = {
-        "latitude": lat,
-        "longitude": lon,
-        "hourly": "wave_height",
-        "daily": "wave_height_max",
-        "timezone": "America/Santiago",
-        "forecast_days": 1,
-    }
-    resp = requests.get(MARINE_URL, params=params, timeout=15)
-    resp.raise_for_status()
-    data = resp.json()
-
+def _parsear_respuesta_marino(data: dict) -> dict:
     hourly = data.get("hourly", {})
     daily = data.get("daily", {})
-
     alturas = hourly.get("wave_height", [])
     ola_actual = next((h for h in alturas if h is not None), None)
     ola_max = (daily.get("wave_height_max") or [None])[0]
-
     return {
         "altura_ola_actual_m": ola_actual,
         "altura_ola_max_m": ola_max,
     }
+
+
+_PARAMS_MARINO = {
+    "hourly": "wave_height",
+    "daily": "wave_height_max",
+    "timezone": "America/Santiago",
+    "forecast_days": 1,
+}
+
+
+def fetch_datos_marino(lat: float, lon: float) -> dict:
+    """Consulta la altura de oleaje para UN punto. Para varios puntos a la
+    vez, usa `fetch_datos_marino_batch()` (1 sola llamada HTTP)."""
+    params = {"latitude": lat, "longitude": lon, **_PARAMS_MARINO}
+    resp = requests.get(MARINE_URL, params=params, timeout=15)
+    resp.raise_for_status()
+    return _parsear_respuesta_marino(resp.json())
+
+
+def fetch_datos_marino_batch(puntos: list[tuple[float, float]]) -> list[dict]:
+    """Igual que `fetch_datos_marino`, pero para VARIOS puntos en UNA sola
+    llamada HTTP."""
+    if not puntos:
+        return []
+    params = {
+        "latitude": ",".join(str(p[0]) for p in puntos),
+        "longitude": ",".join(str(p[1]) for p in puntos),
+        **_PARAMS_MARINO,
+    }
+    resp = requests.get(MARINE_URL, params=params, timeout=30)
+    resp.raise_for_status()
+    data = resp.json()
+    if not isinstance(data, list):
+        data = [data]
+    return [
+        (_parsear_respuesta_marino(d) if d else {"altura_ola_actual_m": None, "altura_ola_max_m": None})
+        for d in data
+    ]
 
 
 # ======================================================================
@@ -349,25 +455,20 @@ def fetch_datos_marino(lat: float, lon: float) -> dict:
 # Si prefieres promediar en vez de tomar el máximo, cambia max() por
 # una media en combinar().
 # ======================================================================
-def fetch_datos_consenso(lat: float, lon: float, horas_viento: int = 12) -> dict:
+def _combinar_fuentes(fuentes_datos: list[dict]) -> dict:
     """
-    `horas_viento`: ventana (en horas hacia adelante) para el PEOR viento y
-    ráfaga previstos. Por defecto 12h; main.py pasa la cantidad real de
-    horas hasta el próximo envío programado (ver HORAS_ENVIO).
-    """
-    fuentes_datos = []
-    for fn in (fetch_datos_open_meteo, fetch_datos_yr, fetch_datos_open_meteo_icon):
-        try:
-            d = fn(lat, lon, horas_viento)
-            if d:
-                fuentes_datos.append(d)
-        except Exception as e:
-            # Antes esto se tragaba en silencio -- sin ningún rastro, era
-            # imposible saber por qué faltaban campos como humedad/sensación
-            # térmica/mín/máx (que dependen SOLO de fetch_datos_open_meteo).
-            # Render captura print() en sus logs, así que esto sí queda visible.
-            print(f"[fetch_datos_consenso] {fn.__name__} falló para ({lat},{lon}): {e}")
+    Combina los dicts normalizados de varias fuentes (open-meteo, yr.no,
+    dwd-icon) en un solo resultado: el valor MÁS ALTO (peor caso) para
+    viento/ráfaga/lluvia/nieve/tormenta, y los campos de solo visualización
+    (humedad, sensación térmica, mín/máx del día, pronóstico por horas,
+    dirección del viento) tomados únicamente de open-meteo (son
+    informativos, no entran en el cálculo de ninguna alerta).
 
+    Reutilizada tanto por `fetch_datos_consenso` (1 punto, llamadas
+    individuales) como por el refresco en lote de `api.py` (68 puntos,
+    2 llamadas HTTP para todos a la vez) -- la combinación es la misma
+    en ambos casos, solo cambia CÓMO se obtuvieron los datos de cada fuente.
+    """
     if not fuentes_datos:
         raise RuntimeError("Ninguna fuente de pronóstico respondió")
 
@@ -394,10 +495,6 @@ def fetch_datos_consenso(lat: float, lon: float, horas_viento: int = 12) -> dict
         "tormenta_proxima": combinar("tormenta_proxima"),  # True si cualquier fuente la detecta
     }
 
-    # Campos de solo visualización (humedad, sensación térmica, mín/máx del
-    # día, pronóstico por horas): se toman del modelo Open-Meteo base
-    # únicamente, no se combinan entre fuentes — son informativos, no
-    # entran en el cálculo de ninguna alerta.
     om = next((d for d in fuentes_datos if d.get("fuente") == "open-meteo"), None)
     resultado["humedad"] = om.get("humedad") if om else None
     resultado["sensacion_c"] = om.get("sensacion_c") if om else None
@@ -406,6 +503,34 @@ def fetch_datos_consenso(lat: float, lon: float, horas_viento: int = 12) -> dict
     resultado["tmin_dia_c"] = om.get("tmin_dia_c") if om else None
     resultado["tmax_dia_c"] = om.get("tmax_dia_c") if om else None
     resultado["proximas_horas"] = om.get("proximas_horas") if om else []
+
+    return resultado
+
+
+def fetch_datos_consenso(lat: float, lon: float, horas_viento: int = 12) -> dict:
+    """
+    `horas_viento`: ventana (en horas hacia adelante) para el PEOR viento y
+    ráfaga previstos. Por defecto 12h; main.py pasa la cantidad real de
+    horas hasta el próximo envío programado (ver HORAS_ENVIO).
+
+    Para MUCHOS puntos a la vez (ej. los 68 centros en api.py), NO uses
+    esta función en un loop -- usa las versiones _batch de cada fuente en
+    su lugar (2-3 llamadas HTTP en total en vez de 68 x 3). Ver api.py.
+    """
+    fuentes_datos = []
+    for fn in (fetch_datos_open_meteo, fetch_datos_yr, fetch_datos_open_meteo_icon):
+        try:
+            d = fn(lat, lon, horas_viento)
+            if d:
+                fuentes_datos.append(d)
+        except Exception as e:
+            # Antes esto se tragaba en silencio -- sin ningún rastro, era
+            # imposible saber por qué faltaban campos como humedad/sensación
+            # térmica/mín/máx (que dependen SOLO de fetch_datos_open_meteo).
+            # Render captura print() en sus logs, así que esto sí queda visible.
+            print(f"[fetch_datos_consenso] {fn.__name__} falló para ({lat},{lon}): {e}")
+
+    resultado = _combinar_fuentes(fuentes_datos)
 
     # Datos marinos: fuente separada, se agregan aparte (no hay "peor caso"
     # entre modelos acá todavía, solo Open-Meteo Marine).
