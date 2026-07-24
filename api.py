@@ -101,6 +101,7 @@ def _refrescar_cache() -> None:
             yr_lote[idx] = datos_yr
 
     sin_ola = {"altura_ola_actual_m": None, "altura_ola_max_m": None}
+    datos_previos = _cache["datos"]  # lo que ya había guardado, por si este refresco falla
 
     resultado: dict = {}
     for i, punto in enumerate(PUNTOS_ESPECIFICOS):
@@ -115,7 +116,16 @@ def _refrescar_cache() -> None:
             datos["lon"] = lon
             resultado[nombre] = datos
         except Exception as e:
-            resultado[nombre] = {"error": str(e)}
+            # Ninguna fuente respondió para este punto en este refresco (ej.
+            # 429 de Open-Meteo agotando los reintentos). En vez de borrar
+            # el dato bueno que ya había con un "error" vacío, se mantiene
+            # el último dato conocido -- unos minutos desactualizado sigue
+            # siendo mucho más útil que una tarjeta en blanco.
+            anterior = datos_previos.get(nombre)
+            if anterior and "error" not in anterior:
+                resultado[nombre] = anterior
+            else:
+                resultado[nombre] = {"error": str(e)}
 
     _cache["datos"] = resultado
     _cache["actualizado_en"] = time.time()
