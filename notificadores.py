@@ -37,12 +37,19 @@ def enviar_email(destinatarios: list[str], asunto: str, cuerpo: str, cuerpo_html
     """
     smtp_host = os.environ["SMTP_HOST"]
     smtp_port = int(os.environ.get("SMTP_PORT", "587"))
-    smtp_user = os.environ["SMTP_USER"]
+    smtp_user = os.environ["SMTP_USER"]  # usuario de LOGIN del SMTP (autenticación)
     smtp_pass = os.environ["SMTP_PASS"]
+    # Dirección real de remitente (el "De" que ve quien recibe el correo).
+    # Con Gmail, es la misma que SMTP_USER — pero con proveedores como
+    # Brevo, el usuario de login (ej. "b31289001@smtp-brevo.com") y el
+    # remitente verificado (ej. "elabbe79@gmail.com") son DISTINTOS, y
+    # usar el de login como remitente hace que el envío se rechace. Si no
+    # se define SMTP_FROM_EMAIL, se usa SMTP_USER como antes (Gmail).
+    smtp_from_email = os.environ.get("SMTP_FROM_EMAIL", "").strip() or smtp_user
     # Nombre visible del remitente (opcional). Si no se define, se usa solo
     # el correo, como antes. Ej: SMTP_FROM_NAME="Alertas Centros de Cultivo"
     smtp_from_name = os.environ.get("SMTP_FROM_NAME", "").strip()
-    remitente = formataddr((smtp_from_name, smtp_user)) if smtp_from_name else smtp_user
+    remitente = formataddr((smtp_from_name, smtp_from_email)) if smtp_from_name else smtp_from_email
 
     if cuerpo_html:
         msg = MIMEMultipart("alternative")
@@ -58,7 +65,7 @@ def enviar_email(destinatarios: list[str], asunto: str, cuerpo: str, cuerpo_html
     with smtplib.SMTP(smtp_host, smtp_port) as server:
         server.starttls()
         server.login(smtp_user, smtp_pass)
-        server.sendmail(smtp_user, destinatarios, msg.as_string())
+        server.sendmail(smtp_from_email, destinatarios, msg.as_string())
 
 
 # ======================================================================
