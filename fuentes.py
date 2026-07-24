@@ -80,7 +80,7 @@ def fetch_datos_open_meteo(lat: float, lon: float, horas_viento: int = 12) -> di
     params = {
         "latitude": lat,
         "longitude": lon,
-        "current": "temperature_2m,wind_speed_10m,wind_gusts_10m,snowfall,weather_code,relative_humidity_2m,apparent_temperature",
+        "current": "temperature_2m,wind_speed_10m,wind_gusts_10m,snowfall,weather_code,relative_humidity_2m,apparent_temperature,wind_direction_10m",
         "hourly": "precipitation,snowfall,temperature_2m,wind_speed_10m,wind_gusts_10m,weather_code",
         "daily": "temperature_2m_min,temperature_2m_max",
         "timezone": "America/Santiago",
@@ -128,6 +128,7 @@ def fetch_datos_open_meteo(lat: float, lon: float, horas_viento: int = 12) -> di
         "temp_actual_c": current.get("temperature_2m"),
         "humedad": current.get("relative_humidity_2m"),
         "sensacion_c": current.get("apparent_temperature"),
+        "direccion_viento": current.get("wind_direction_10m"),
         "codigo_actual": current.get("weather_code"),
         "tmin_dia_c": (daily.get("temperature_2m_min") or [None])[0],
         "tmax_dia_c": (daily.get("temperature_2m_max") or [None])[0],
@@ -396,6 +397,7 @@ def fetch_datos_consenso(lat: float, lon: float, horas_viento: int = 12) -> dict
     om = next((d for d in fuentes_datos if d.get("fuente") == "open-meteo"), None)
     resultado["humedad"] = om.get("humedad") if om else None
     resultado["sensacion_c"] = om.get("sensacion_c") if om else None
+    resultado["direccion_viento"] = om.get("direccion_viento") if om else None
     resultado["codigo_actual"] = om.get("codigo_actual") if om else None
     resultado["tmin_dia_c"] = om.get("tmin_dia_c") if om else None
     resultado["tmax_dia_c"] = om.get("tmax_dia_c") if om else None
