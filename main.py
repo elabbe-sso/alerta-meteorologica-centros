@@ -39,7 +39,7 @@ MAX_HILOS = 12
 # .github/workflows/alertas.yml), pero el envío del correo solo ocurre en
 # estos horarios — así no se manda un correo cada 30 min, sino un reporte
 # a horarios fijos.
-HORAS_ENVIO = [(7, 30), (14, 0), (19, 0), (22, 24)]  # (22,24) = prueba temporal, quitar después
+HORAS_ENVIO = [(7, 30), (14, 0), (19, 0), (22, 43)]  # (22,43) = prueba temporal, quitar después
 
 
 def _lista_desde_env(var: str, default: list[str]) -> list[str]:
