@@ -190,10 +190,10 @@ def generar_cuerpo_html(alertas: list[dict], ahora: datetime) -> str:
                   </div>
                 </td>
                 <td align="right" valign="top">
-                  <a href="{URL_APP}" style="font-family:monospace;font-size:11px;color:#0096a0;
-                     background:rgba(0,150,160,.15);border:1px solid rgba(0,150,160,.4);
-                     padding:6px 12px;border-radius:20px;text-decoration:none;white-space:nowrap;">
-                    Ver app ↗
+                  <a href="{URL_APP}" style="font-family:Arial,sans-serif;font-size:11px;color:#ffffff;
+                     background:#00b8c4;padding:6px 12px;border-radius:20px;text-decoration:none;
+                     white-space:nowrap;font-weight:700;">
+                    Ver en vivo ↗
                   </a>
                 </td>
               </tr>
