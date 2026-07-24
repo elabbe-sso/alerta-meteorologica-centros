@@ -30,6 +30,7 @@
   button.refresh:disabled{opacity:.5;cursor:default}
 
   .summary-row{display:flex;align-items:center;gap:10px;margin:8px 4px 18px;flex-wrap:wrap}
+  .port-link-row{display:flex;justify-content:flex-end;margin:0 4px 16px}
   .summary{display:flex;gap:8px;flex-wrap:wrap}
   .chip{font-family:"IBM Plex Mono",monospace;font-size:11px;padding:4px 8px;border-radius:20px;
     border:1px solid var(--line);color:var(--muted);display:flex;align-items:center;gap:5px}
@@ -96,6 +97,8 @@
   .mcell{background:var(--surface-2);border-radius:8px;padding:6px 4px;text-align:center}
   .mcell .lbl{font-family:"IBM Plex Mono",monospace;font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
   .mcell .val{font-family:"Space Grotesk",sans-serif;font-size:14px;font-weight:500;margin-top:2px}
+  .veleta{display:inline-block;font-size:11px;color:var(--glacier)}
+  .mcell .dir{font-family:"IBM Plex Mono",monospace;font-size:9px;color:var(--muted);margin-top:1px}
 
   /* Animación de entrada de tarjetas */
   @keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
@@ -128,9 +131,12 @@
     </div>
     <div class="summary-row">
       <div class="summary" id="summary"></div>
-      <a href="https://sitport.directemar.cl/#/general" target="_blank" rel="noopener" class="port-link-top">⚓ Estados de Puerto ↗</a>
     </div>
   </header>
+
+  <div class="port-link-row">
+    <a href="https://sitport.directemar.cl/#/general" target="_blank" rel="noopener" class="port-link-top">⚓ Estados de Puerto ↗</a>
+  </div>
 
   <div id="contenido"></div>
 
@@ -141,7 +147,8 @@
   </div>
   <div class="foot">
     Datos: <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a> ·
-    Umbrales propios editables en el código · Se actualiza solo cada 15 min
+    Umbrales propios editables en el código · Se actualiza solo cada 15 min<br>
+    <a href="https://sitport.directemar.cl/#/general" target="_blank" rel="noopener">⚓ Estados de Puerto ↗</a>
   </div>
 
 <script>
@@ -275,6 +282,13 @@ function umbralDe(nombre, region){
 }
 
 /* ---------- Iconos y texto según código WMO (Open-Meteo) ---------- */
+/* ---------- Dirección del viento: grados -> abreviatura cardinal ---------- */
+function abreviaturaDireccion(grados){
+  if(grados == null) return "";
+  const puntos = ["N","NE","E","SE","S","SO","O","NO"];
+  return puntos[Math.round(grados / 45) % 8];
+}
+
 function iconoClima(code){
   if(code == null) return "—";
   if(code === 0) return "☀️";
@@ -297,6 +311,7 @@ function evaluar(nombre, d, region){
   const tempActual = d.temp_actual_c;
   const humedad = d.humedad;
   const sensacion = d.sensacion_c;
+  const direccionViento = d.direccion_viento;
   const codigoActual = d.codigo_actual;
   const precip = d.precipitacion_24h_mm;
   const tmin   = d.tmin_dia_c;
@@ -353,7 +368,7 @@ function evaluar(nombre, d, region){
   else if (countAmarillas >= 1) estado = "amarilla";
   // si solo hayHelada (sin nada más), estado se queda en "verde" -> informativa
 
-  return { estado, motivos, tempActual, viento, rafaga, humedad, sensacion, precip, tmin, tmax,
+  return { estado, motivos, tempActual, viento, rafaga, humedad, sensacion, precip, tmin, tmax, direccionViento,
            codigoActual, proximasHoras, ola };
 }
 
@@ -528,8 +543,8 @@ function render(){
         ${motivosHtml}
         ${horasHtml}
         <div class="metrics-grid">
-          <div class="mcell"><div class="lbl">Viento</div><div class="val">${fmt(ev.viento,"km/h")}</div></div>
-          <div class="mcell"><div class="lbl">Ráfaga</div><div class="val">${fmt(ev.rafaga,"km/h")}</div></div>
+          <div class="mcell"><div class="lbl">Viento</div><div class="val">${ev.direccionViento!=null ? `<span class="veleta" style="transform:rotate(${ev.direccionViento}deg)">➤</span> ` : ''}${fmt(ev.viento,"km/h")}</div>${ev.direccionViento!=null ? `<div class="dir">${abreviaturaDireccion(ev.direccionViento)}</div>` : ''}</div>
+          <div class="mcell"><div class="lbl">Ráfaga</div><div class="val">${ev.direccionViento!=null ? `<span class="veleta" style="transform:rotate(${ev.direccionViento}deg)">➤</span> ` : ''}${fmt(ev.rafaga,"km/h")}</div>${ev.direccionViento!=null ? `<div class="dir">${abreviaturaDireccion(ev.direccionViento)}</div>` : ''}</div>
           <div class="mcell"><div class="lbl">Humedad</div><div class="val">${ev.humedad!=null?Math.round(ev.humedad)+"%":"—"}</div></div>
           <div class="mcell"><div class="lbl">Sens. térm.</div><div class="val">${fmt(ev.sensacion,"°C")}</div></div>
           <div class="mcell"><div class="lbl">Lluvia</div><div class="val">${fmt(ev.precip,"mm")}</div></div>
