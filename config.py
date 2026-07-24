@@ -48,7 +48,7 @@ UMBRALES_DEFAULT = {
     "viento_kmh": 40,          # viento sostenido
     "rafagas_kmh": 60,         # ráfagas de viento (picos puntuales, siempre >= viento sostenido)
     "precipitacion_24h_mm": 50,  # agua caída en 24 horas
-    "temp_min_c": -3,          # riesgo de helada fuerte
+    "temp_min_c": -1,          # helada: punto de entrada (amarilla) para Los Lagos y Aysén
     "altura_ola_m": 2.0,       # oleaje (metros) — relevante para operaciones en centros de cultivo
 }
 
@@ -60,9 +60,30 @@ UMBRALES_POR_COMUNA = {}
 # Override de umbrales POR REGIÓN completa. Se aplica a todos los puntos
 # de esa región, antes del override individual por nombre (que sigue
 # pudiendo pisar esto para un punto puntual si hace falta). Los Lagos y
-# Aysén no necesitan entrada acá porque ya usan el default (-3°C).
+# Aysén no necesitan entrada acá porque ya usan el default (-1°C).
 UMBRALES_POR_REGION = {
-    "Magallanes": {"temp_min_c": -5},  # heladas más severas y frecuentes en el extremo sur
+    "Magallanes": {"temp_min_c": -3},  # heladas más severas y frecuentes en el extremo sur
+}
+
+# -----------------------------------------------------------------------
+# ESCALA DE SEVERIDAD (4 colores: verde/amarilla/naranja/roja)
+# -----------------------------------------------------------------------
+# Para viento, ráfagas, lluvia y oleaje, la severidad es PROPORCIONAL al
+# umbral base de arriba: 0-20% sobre el umbral = amarilla, 20-40% = naranja,
+# 40%+ = roja. Estos porcentajes son configurables acá.
+ESCALA_PROPORCIONAL = {
+    "naranja_desde": 1.20,  # 20% sobre el umbral
+    "roja_desde": 1.40,     # 40% sobre el umbral
+}
+
+# La helada NO es proporcional (las temperaturas negativas hacen que un
+# porcentaje no tenga un sentido intuitivo) — usa quiebres fijos en °C,
+# distintos por región. UMBRALES_DEFAULT/POR_REGION arriba definen el punto
+# de entrada (amarilla); esto define dónde empiezan naranja y roja.
+HELADA_ESCALA = {
+    "Los Lagos":  {"naranja": -1.5, "roja": -3.0},
+    "Aysén":      {"naranja": -1.5, "roja": -3.0},
+    "Magallanes": {"naranja": -4.0, "roja": -6.0},
 }
 
 
