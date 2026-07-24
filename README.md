@@ -25,7 +25,7 @@ cuando corresponde. Incluye además una app web de monitoreo en vivo.
   - Ráfagas ≥ 60 km/h (mismo criterio de pronóstico que el viento)
   - Lluvia ≥ 50 mm/24h
   - Oleaje ≥ 2.0 m
-  - Helada: mínima pronosticada ≤ -3°C (Los Lagos y Aysén) o ≤ -5°C (Magallanes), mirando **solo las próximas 12 horas hacia adelante** (nunca horas ya pasadas — ver detalle abajo)
+  - Helada: mínima pronosticada ≤ -1°C (Los Lagos y Aysén) o ≤ -3°C (Magallanes), mirando **solo las próximas 12 horas hacia adelante** (nunca horas ya pasadas — ver detalle abajo). Estos son los umbrales de ENTRADA (amarilla); ver más abajo la escala completa de 4 colores con naranja y roja.
   - Tormenta eléctrica: código de clima 95/96/99 detectado ahora o en las próximas 6 horas (cuenta como una condición amarilla más — ver reglas de severidad abajo)
 - **Notificación por email — reporte en horarios fijos**: el chequeo de datos
   corre cada vez que el workflow se dispara, pero el correo
@@ -50,28 +50,61 @@ cuando corresponde. Incluye además una app web de monitoreo en vivo.
   próximas 6h, chips de resumen clicables (filtran por color), enlace
   destacado a "Estados de Puerto" (ver abajo).
 
-## Reglas de severidad (color) — idénticas en `app.html` y el correo
+## Reglas de severidad (color) — 4 niveles, idénticas en `app.html` y el correo
 
-El color final de cada centro (roja/amarilla/informativa) se calcula igual
-en ambos lados (`app.html` y `reporte.py`/`reglas.py`), no por el tipo
-individual de cada condición sino por esta tabla:
+El color final de cada centro (verde/amarilla/naranja/roja) se calcula
+igual en ambos lados (`app.html` en JavaScript, `reglas.py` en Python) —
+implementaciones separadas por necesidad (una corre en el navegador, la
+otra en el servidor de correo), pero mantenidas con el mismo criterio
+exacto. **Verde significa exclusivamente "sin alerta"** en todo el
+sistema — ya no existe una categoría "informativa" aparte.
 
-| Situación | Color |
+**Severidad individual** de viento, ráfagas, lluvia y oleaje — proporcional
+al umbral base de cada uno (`ESCALA_PROPORCIONAL` en `config.py`):
+
+| Cuánto supera el umbral | Color |
 |---|---|
-| Solo helada | Verde (informativa) |
-| 1 sola condición amarilla (viento, ráfaga, lluvia, oleaje, o tormenta) | Amarilla |
-| Helada + 1 amarilla | Amarilla (la helada nunca cuenta para el "2 o más") |
-| 2 o más amarillas juntas (la tormenta cuenta como una más) | Roja |
-| Cualquier condición al 30% o más sobre su umbral, aunque sea única | Roja |
-| Nada activo | Verde (sin alerta) |
+| 0-20% sobre el umbral | Amarilla |
+| 20-40% sobre el umbral | Naranja |
+| 40% o más sobre el umbral | Roja |
 
-Para que el correo pueda calcular el 30% extremo, `reglas.py` incluye el
-`valor` y `umbral` numérico de cada alerta (no solo el mensaje ya armado).
-`app.html` calcula esta misma tabla del lado del navegador (con los datos
-que le sirve `api.py`, ver más abajo) — es la única otra parte del sistema
-que colorea centros, y usa exactamente este mismo criterio.
+**Helada** — NO es proporcional (un "% bajo cero" no tiene un sentido
+intuitivo). Usa quiebres fijos en °C, distintos por región
+(`HELADA_ESCALA` en `config.py`):
 
-Cuando una categoría (rojas/amarillas/informativas) llega a **10 o más
+| | Los Lagos / Aysén | Magallanes |
+|---|---|---|
+| Sin alerta | sobre -1°C | sobre -3°C |
+| Amarilla | -1°C a -1.5°C | -3°C a -4°C |
+| Naranja | -1.5°C a -3°C | -4°C a -6°C |
+| Roja | bajo -3°C | bajo -6°C |
+
+**Tormenta eléctrica** — sin valor numérico, así que sola siempre es
+**naranja** (no tiene niveles amarilla/roja individuales).
+
+**Combinación por cantidad de condiciones activas en un mismo centro**
+(la helada y la tormenta cuentan igual que cualquier otra):
+
+| Cantidad de condiciones juntas | Color mínimo |
+|---|---|
+| 1 sola | su propio color individual (tabla de arriba) |
+| 2 juntas | Naranja |
+| 3 o más juntas | Roja |
+
+El color final de un centro es **el más alto entre el piso por cantidad y
+el color individual más grave de sus condiciones** — nunca "baja" de nivel
+por combinarse con algo leve. Ejemplo: viento al 45% sobre su umbral (ya
+sería roja solo) + lluvia recién sobre la suya (amarilla) = 2 condiciones
+→ el piso por cantidad sería naranja, pero como el viento solo ya era
+roja, el resultado final es **roja**.
+
+Para que el correo pueda calcular esto, `reglas.py` incluye el `valor` y
+`umbral` numérico de cada alerta (no solo el mensaje ya armado), y todas
+las alertas de un mismo centro comparten el mismo campo `"color"` (el
+resultado final ya combinado) — `reporte.py` solo agrupa por ese campo,
+no recalcula nada.
+
+Cuando una categoría (rojas/naranjas/amarillas) llega a **10 o más
 centros**, el correo la condensa en una lista de nombres en vez de una
 tarjeta de detalle por cada uno — para que no se vuelva eterno de leer
 (`UMBRAL_CONDENSAR` en `reporte.py`). Las rojas nunca se condensan.
@@ -101,8 +134,11 @@ próximas 12 horas**, mirando siempre hacia adelante:
 - Si el frío **viene** más tarde, la alerta se enciende con anticipación.
 
 El umbral en sí varía por región (`UMBRALES_POR_REGION` en `config.py`,
-`UMBRAL_POR_REGION` en `app.html`): -3°C en Los Lagos y Aysén, -5°C en
+`UMBRAL_POR_REGION` en `app.html`): -1°C en Los Lagos y Aysén, -3°C en
 Magallanes, donde las heladas moderadas son normales y no ameritan alerta.
+Este es el umbral de ENTRADA (amarilla) — la escala completa de severidad
+(con naranja y roja) usa quiebres adicionales, ver la sección de reglas
+de severidad más arriba.
 
 Misma lógica en `fuentes.py` (`_extremo_prevista()`) y en `app.html`.
 
