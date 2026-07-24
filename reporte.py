@@ -9,8 +9,9 @@ cuando no hay ninguna alerta activa.
 from __future__ import annotations
 from datetime import datetime
 
-COLOR_HEX = {"roja": "#e5484d", "amarilla": "#e3b341", "verde": "#3fb950"}
-TITULO_SEVERIDAD = {"roja": "Rojas", "amarilla": "Amarillas", "verde": "Informativas"}
+COLOR_HEX = {"roja": "#e5484d", "naranja": "#f97316", "amarilla": "#e3b341", "verde": "#3fb950"}
+TITULO_SEVERIDAD = {"roja": "Rojas", "naranja": "Naranjas", "amarilla": "Amarillas", "verde": "Verdes"}
+ORDEN_SEVERIDAD = ("roja", "naranja", "amarilla", "verde")
 
 MENSAJE_SIN_ALERTAS = (
     "No hay parámetros meteorológicos que superen los umbrales definidos "
@@ -39,20 +40,13 @@ def _extraer_condicion(mensaje: str, comuna: str) -> str:
     return mensaje.rstrip(".")
 
 
-# Tipos que cuentan para el "2 o más" (la helada NUNCA cuenta acá).
-TIPOS_AMARILLOS = {"viento", "rafagas", "precipitacion", "oleaje", "tormenta"}
-
-
-def _agrupar_por_centro_y_severidad(alertas: list[dict]) -> dict[str, list[tuple[str, list[str]]]]:
+def _agrupar_por_centro(alertas: list[dict]) -> dict[str, list[tuple[str, list[str]]]]:
     """
-    Agrupa TODAS las alertas por centro y calcula la severidad FINAL de
-    cada uno con las mismas reglas que app.html (no por el tipo individual
-    de cada alerta por separado):
-      - Solo helada -> verde (informativa).
-      - 1 sola condición amarilla (viento/ráfaga/lluvia/oleaje/tormenta) -> amarilla.
-      - Helada + 1 amarilla -> amarilla (la helada nunca cuenta para el "2 o más").
-      - 2+ amarillas juntas (la tormenta cuenta como una más) -> roja.
-      - Cualquier condición al 30%+ sobre su umbral, aunque sea única -> roja.
+    Agrupa las alertas por centro (preservando el orden de aparición). El
+    color de cada centro YA viene calculado por reglas.py (todas las
+    alertas de un mismo centro comparten el mismo campo "color" -- el
+    resultado final de combinar sus condiciones), asi que aca solo hace
+    falta agrupar y armar el texto de cada condicion.
     """
     por_centro: dict[str, list[dict]] = {}
     orden: list[str] = []
@@ -63,31 +57,11 @@ def _agrupar_por_centro_y_severidad(alertas: list[dict]) -> dict[str, list[tuple
             orden.append(comuna)
         por_centro[comuna].append(a)
 
-    resultado: dict[str, list[tuple[str, list[str]]]] = {"roja": [], "amarilla": [], "verde": []}
+    resultado: dict[str, list[tuple[str, list[str]]]] = {"roja": [], "naranja": [], "amarilla": [], "verde": []}
     for comuna in orden:
-        count_amarillas = 0
-        es_roja = False
-        condiciones = []
-        for a in por_centro[comuna]:
-            condiciones.append(_extraer_condicion(a["mensaje"], comuna))
-            tipo = a["tipo"]
-            if tipo in TIPOS_AMARILLOS:
-                count_amarillas += 1
-                valor, umbral = a.get("valor"), a.get("umbral")
-                if valor is not None and umbral:
-                    if valor >= umbral * 1.3:
-                        es_roja = True
-
-        if count_amarillas >= 2:
-            es_roja = True
-
-        if es_roja:
-            color = "roja"
-        elif count_amarillas >= 1:
-            color = "amarilla"
-        else:
-            color = "verde"  # solo helada
-
+        alertas_centro = por_centro[comuna]
+        color = alertas_centro[0]["color"]  # todas las de un centro comparten el mismo color final
+        condiciones = [_extraer_condicion(a["mensaje"], comuna) for a in alertas_centro]
         resultado[color].append((comuna, condiciones))
 
     return resultado
@@ -102,9 +76,9 @@ def generar_cuerpo_texto(alertas: list[dict], ahora: datetime) -> str:
     if not alertas:
         return encabezado + "\n" + MENSAJE_SIN_ALERTAS + "\n"
 
-    grupos = _agrupar_por_centro_y_severidad(alertas)
+    grupos = _agrupar_por_centro(alertas)
     partes = [encabezado]
-    for color in ("roja", "amarilla", "verde"):
+    for color in ORDEN_SEVERIDAD:
         centros = grupos[color]
         if not centros:
             continue
@@ -127,9 +101,9 @@ def generar_cuerpo_html(alertas: list[dict], ahora: datetime) -> str:
             ✅ {MENSAJE_SIN_ALERTAS}
           </div>"""
     else:
-        grupos = _agrupar_por_centro_y_severidad(alertas)
+        grupos = _agrupar_por_centro(alertas)
         secciones = []
-        for color in ("roja", "amarilla", "verde"):
+        for color in ORDEN_SEVERIDAD:
             centros = grupos[color]
             if not centros:
                 continue
