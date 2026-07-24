@@ -96,7 +96,7 @@ def _evaluar_punto(punto: tuple, horas_viento: int) -> list[dict]:
     try:
         datos = fetch_datos_consenso(lat, lon, horas_viento)
         umbrales = obtener_umbrales_punto(nombre)
-        return evaluar_umbrales(nombre, datos, umbrales, usar_pronostico_viento=True)
+        return evaluar_umbrales(nombre, datos, umbrales, region, usar_pronostico_viento=True)
     except Exception:
         log.exception("Error obteniendo datos de Open-Meteo para %s", nombre)
         return []
