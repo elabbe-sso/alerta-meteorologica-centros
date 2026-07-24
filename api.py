@@ -70,15 +70,18 @@ def _cache_vigente() -> bool:
     return (time.time() - _cache["actualizado_en"]) < CACHE_TTL_SEGUNDOS
 
 
-# NOTA: antes había un precalentado automático del caché apenas arrancaba
-# el proceso (un hilo de fondo que salía a buscar los 68 puntos de
-# inmediato). Se quitó: en el plan gratis de Render (memoria y CPU muy
-# limitadas), ese trabajo pesado justo al arrancar parecía estar causando
-# reinicios en bucle (varios 503 seguidos hasta que se estabilizaba solo).
-# En su lugar, el cronjob externo que mantiene el servidor despierto ahora
-# apunta directo a /api/datos (no solo a la página base) — así cumple las
-# dos funciones a la vez: evita que se duerma, Y mantiene el caché fresco,
-# sin sobrecargar el arranque del proceso.
+# Evita lanzar varios refrescos en segundo plano a la vez si llegan varias
+# consultas mientras el caché ya está vencido (una sola vez basta).
+_refrescando = False
+
+
+def _refrescar_en_segundo_plano() -> None:
+    global _refrescando
+    try:
+        _refrescar_cache()
+    finally:
+        with _cache_lock:
+            _refrescando = False
 
 
 @app.after_request
@@ -91,9 +94,25 @@ def _agregar_cors(response):
 
 @app.route("/api/datos")
 def api_datos():
+    """
+    Sirve el caché INMEDIATO, sin hacer esperar a quien consulta — incluso
+    si está un poco vencido (hasta 15 min de más), se sigue viendo bien y
+    es mucho mejor que una espera de 10-30 segundos. Si ya venció, dispara
+    un refresco en segundo plano (no bloquea esta respuesta) para que la
+    PRÓXIMA consulta ya tenga datos frescos. La única excepción real es la
+    primerísima vez que arranca el proceso: ahí no hay nada guardado
+    todavía, así que esa consulta sí tiene que esperar el primer refresco.
+    """
+    global _refrescando
     with _cache_lock:
-        if not _cache_vigente():
-            _refrescar_cache()
+        hay_datos = bool(_cache["datos"])
+        vigente = _cache_vigente()
+        if not hay_datos:
+            _refrescar_cache()  # primera vez: no hay nada que servir, toca esperar
+        elif not vigente and not _refrescando:
+            _refrescando = True
+            threading.Thread(target=_refrescar_en_segundo_plano, daemon=True).start()
+
     return jsonify(_cache["datos"])
 
 
