@@ -70,24 +70,15 @@ def _cache_vigente() -> bool:
     return (time.time() - _cache["actualizado_en"]) < CACHE_TTL_SEGUNDOS
 
 
-def _precalentar_cache_en_segundo_plano():
-    """
-    Se ejecuta apenas arranca el proceso (ver la llamada al final del
-    archivo, a nivel de módulo — así corre tanto con `python api.py` como
-    con gunicorn, que no ejecuta el bloque `if __name__ == "__main__"`).
-    Sin esto, la primera persona en consultar `/api/datos` después de que
-    el servidor esté dormido tendría que esperar el refresco completo (que
-    puede superar el límite de tiempo por defecto de Gunicorn y devolver
-    un error 502) — precalentando en segundo plano, para cuando llegue una
-    consulta real el caché ya debería estar listo.
-    """
-    try:
-        _refrescar_cache()
-    except Exception:
-        pass  # si falla al arrancar, /api/datos lo vuelve a intentar solo
-
-
-threading.Thread(target=_precalentar_cache_en_segundo_plano, daemon=True).start()
+# NOTA: antes había un precalentado automático del caché apenas arrancaba
+# el proceso (un hilo de fondo que salía a buscar los 68 puntos de
+# inmediato). Se quitó: en el plan gratis de Render (memoria y CPU muy
+# limitadas), ese trabajo pesado justo al arrancar parecía estar causando
+# reinicios en bucle (varios 503 seguidos hasta que se estabilizaba solo).
+# En su lugar, el cronjob externo que mantiene el servidor despierto ahora
+# apunta directo a /api/datos (no solo a la página base) — así cumple las
+# dos funciones a la vez: evita que se duerma, Y mantiene el caché fresco,
+# sin sobrecargar el arranque del proceso.
 
 
 @app.after_request
