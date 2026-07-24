@@ -543,8 +543,8 @@ function render(){
         ${motivosHtml}
         ${horasHtml}
         <div class="metrics-grid">
-          <div class="mcell"><div class="lbl">Viento</div><div class="val">${ev.direccionViento!=null ? `<span class="veleta" style="transform:rotate(${ev.direccionViento + 90}deg)">➤</span> ` : ''}${fmt(ev.viento,"km/h")}</div>${ev.direccionViento!=null ? `<div class="dir">${abreviaturaDireccion(ev.direccionViento)}</div>` : ''}</div>
-          <div class="mcell"><div class="lbl">Ráfaga</div><div class="val">${ev.direccionViento!=null ? `<span class="veleta" style="transform:rotate(${ev.direccionViento + 90}deg)">➤</span> ` : ''}${fmt(ev.rafaga,"km/h")}</div>${ev.direccionViento!=null ? `<div class="dir">${abreviaturaDireccion(ev.direccionViento)}</div>` : ''}</div>
+          <div class="mcell"><div class="lbl">Viento</div><div class="val">${ev.direccionViento!=null ? `<span class="veleta" style="transform:rotate(${ev.direccionViento + 90}deg)">➤</span> ` : ''}${fmt(ev.viento,"km/h")}</div></div>
+          <div class="mcell"><div class="lbl">Ráfaga</div><div class="val">${ev.direccionViento!=null ? `<span class="veleta" style="transform:rotate(${ev.direccionViento + 90}deg)">➤</span> ` : ''}${fmt(ev.rafaga,"km/h")}</div></div>
           <div class="mcell"><div class="lbl">Humedad</div><div class="val">${ev.humedad!=null?Math.round(ev.humedad)+"%":"—"}</div></div>
           <div class="mcell"><div class="lbl">Sens. térm.</div><div class="val">${fmt(ev.sensacion,"°C")}</div></div>
           <div class="mcell"><div class="lbl">Lluvia</div><div class="val">${fmt(ev.precip,"mm")}</div></div>
