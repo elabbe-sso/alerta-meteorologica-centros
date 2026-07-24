@@ -32,6 +32,7 @@ Estado de cada fuente en este prototipo:
 
 from __future__ import annotations
 import requests
+import time
 from datetime import datetime, timedelta, timezone
 
 
@@ -39,6 +40,31 @@ from datetime import datetime, timedelta, timezone
 # 1. OPEN-METEO — datos crudos por coordenada (funcional)
 # ======================================================================
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
+
+
+def _get_con_reintento(url: str, params: dict, timeout: int, intentos: int = 3):
+    """
+    GET con reintento automático ante 429 "Too Many Requests" -- Render
+    (plan gratis) comparte el pool de IPs de salida entre TODOS sus
+    clientes en la región, así que un 429 no siempre significa que NOSOTROS
+    superamos el límite; puede ser tráfico de otra app ajena compartiendo
+    la misma IP en ese momento. Como suele ser algo pasajero, esperar un
+    poco y reintentar resuelve la mayoría de los casos.
+    """
+    espera = 2  # segundos, se duplica en cada intento (2, 4, 8...)
+    ultimo_error = None
+    for intento in range(1, intentos + 1):
+        resp = requests.get(url, params=params, timeout=timeout)
+        if resp.status_code != 429:
+            resp.raise_for_status()
+            return resp
+        ultimo_error = resp
+        if intento < intentos:
+            print(f"[fuentes.py] 429 de Open-Meteo (intento {intento}/{intentos}), "
+                  f"reintentando en {espera}s...")
+            time.sleep(espera)
+            espera *= 2
+    ultimo_error.raise_for_status()  # ya no quedan reintentos: deja que falle normal
 
 
 def _extremo_prevista(horas_iso: list[str], valores: list, horas_ventana: int, agregador) -> float | None:
@@ -172,8 +198,7 @@ def fetch_datos_open_meteo_batch(puntos: list[tuple[float, float]], horas_viento
         "longitude": ",".join(str(p[1]) for p in puntos),
         **_PARAMS_OPEN_METEO_BASE,
     }
-    resp = requests.get(OPEN_METEO_URL, params=params, timeout=30)
-    resp.raise_for_status()
+    resp = _get_con_reintento(OPEN_METEO_URL, params, timeout=30)
     data = resp.json()
     if not isinstance(data, list):
         data = [data]  # Open-Meteo devuelve un dict pelado si solo hay 1 punto
@@ -374,8 +399,7 @@ def fetch_datos_open_meteo_icon_batch(puntos: list[tuple[float, float]], horas_v
         "longitude": ",".join(str(p[1]) for p in puntos),
         **_PARAMS_OPEN_METEO_ICON,
     }
-    resp = requests.get(OPEN_METEO_URL, params=params, timeout=30)
-    resp.raise_for_status()
+    resp = _get_con_reintento(OPEN_METEO_URL, params, timeout=30)
     data = resp.json()
     if not isinstance(data, list):
         data = [data]
@@ -436,8 +460,7 @@ def fetch_datos_marino_batch(puntos: list[tuple[float, float]]) -> list[dict]:
         "longitude": ",".join(str(p[1]) for p in puntos),
         **_PARAMS_MARINO,
     }
-    resp = requests.get(MARINE_URL, params=params, timeout=30)
-    resp.raise_for_status()
+    resp = _get_con_reintento(MARINE_URL, params, timeout=30)
     data = resp.json()
     if not isinstance(data, list):
         data = [data]
