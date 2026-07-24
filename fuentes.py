@@ -361,8 +361,12 @@ def fetch_datos_consenso(lat: float, lon: float, horas_viento: int = 12) -> dict
             d = fn(lat, lon, horas_viento)
             if d:
                 fuentes_datos.append(d)
-        except Exception:
-            pass
+        except Exception as e:
+            # Antes esto se tragaba en silencio -- sin ningún rastro, era
+            # imposible saber por qué faltaban campos como humedad/sensación
+            # térmica/mín/máx (que dependen SOLO de fetch_datos_open_meteo).
+            # Render captura print() en sus logs, así que esto sí queda visible.
+            print(f"[fetch_datos_consenso] {fn.__name__} falló para ({lat},{lon}): {e}")
 
     if not fuentes_datos:
         raise RuntimeError("Ninguna fuente de pronóstico respondió")
