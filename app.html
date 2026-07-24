@@ -11,7 +11,7 @@
   :root{
     --bg:#0b161f; --surface:#13232f; --surface-2:#1b303e; --line:#24404f;
     --ink:#e8eef2; --muted:#7f97a6; --glacier:#0096a0;
-    --verde:#3fb950; --amarilla:#e3b341; --roja:#e5484d;
+    --verde:#3fb950; --amarilla:#e3b341; --naranja:#f97316; --roja:#e5484d;
   }
   *{box-sizing:border-box}
   html,body{margin:0;background:var(--bg);color:var(--ink);
@@ -49,6 +49,7 @@
     border-radius:12px;padding:14px 16px;margin-bottom:10px;transition:.15s}
   .card.verde{border-left-color:var(--verde)}
   .card.amarilla{border-left-color:var(--amarilla)}
+  .card.naranja{border-left-color:var(--naranja);box-shadow:0 0 20px -8px rgba(249,115,22,.5)}
   .card.roja{border-left-color:var(--roja);box-shadow:0 0 20px -8px rgba(229,72,77,.5)}
   .card .top{display:flex;align-items:center;gap:10px}
   .card .name{font-family:"Space Grotesk",sans-serif;font-weight:500;font-size:16px}
@@ -56,9 +57,11 @@
     letter-spacing:.05em;padding:3px 9px;border-radius:20px;font-weight:500}
   .badge.verde{background:rgba(63,185,80,.15);color:var(--verde)}
   .badge.amarilla{background:rgba(227,179,65,.15);color:var(--amarilla)}
+  .badge.naranja{background:rgba(249,115,22,.15);color:var(--naranja)}
   .badge.roja{background:rgba(229,72,77,.15);color:var(--roja)}
   .badge.ok{background:var(--surface-2);color:var(--muted)}
   .reasons{margin-top:6px;font-size:13px;color:var(--amarilla)}
+  .reasons.naranja{color:var(--naranja)}
   .reasons.roja{color:var(--roja)}
   .metrics{display:flex;gap:16px;margin-top:10px;flex-wrap:wrap}
   .metric{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--muted)}
@@ -141,8 +144,9 @@
   <div id="contenido"></div>
 
   <div class="legend">
-    <div class="row"><span class="d" style="background:var(--roja)"></span>Roja — condición severa o varios umbrales superados</div>
-    <div class="row"><span class="d" style="background:var(--amarilla)"></span>Amarilla — un umbral superado</div>
+    <div class="row"><span class="d" style="background:var(--roja)"></span>Roja — condición severa, 3+ condiciones juntas, o cualquiera al 40%+ sobre su umbral</div>
+    <div class="row"><span class="d" style="background:var(--naranja)"></span>Naranja — 2 condiciones juntas, o una entre 20-40% sobre su umbral</div>
+    <div class="row"><span class="d" style="background:var(--amarilla)"></span>Amarilla — 1 condición, recién sobre su umbral</div>
     <div class="row"><span class="d" style="background:var(--verde)"></span>Sin alerta — condiciones bajo umbral</div>
   </div>
   <div class="foot">
@@ -159,13 +163,48 @@
 // corporativas. Reemplaza esto con tu URL real una vez desplegado.
 const API_BASE = "https://alerta-meteorologica-centros.onrender.com";
 
-const UMBRAL = { viento:40, rafaga:60, precip:50, tempMin:-3, ola:2.0 };  // km/h, km/h, mm/24h, °C, m
+const UMBRAL = { viento:40, rafaga:60, precip:50, tempMin:-1, ola:2.0 };  // km/h, km/h, mm/24h, °C, m
 const OVERRIDE = {};
 // Override de umbrales por región completa (se aplica antes que OVERRIDE
-// por nombre puntual). Los Lagos y Aysén usan el default (-3°C).
+// por nombre puntual). Los Lagos y Aysén usan el default (-1°C).
 const UMBRAL_POR_REGION = {
-  "Magallanes": { tempMin: -5 },  // heladas más severas y frecuentes en el extremo sur
+  "Magallanes": { tempMin: -3 },  // heladas más severas y frecuentes en el extremo sur
 };
+
+// Escala de severidad (4 colores): igual criterio que reglas.py.
+// Viento/ráfaga/lluvia/oleaje: proporcional al umbral. Helada: quiebres
+// fijos en °C por región (no proporcional).
+const ESCALA_PROPORCIONAL = { naranjaDesde: 1.20, rojaDesde: 1.40 };
+const HELADA_ESCALA = {
+  "Los Lagos":  { naranja: -1.5, roja: -3.0 },
+  "Aysén":      { naranja: -1.5, roja: -3.0 },
+  "Magallanes": { naranja: -4.0, roja: -6.0 },
+};
+const PESO_COLOR = { verde:0, amarilla:1, naranja:2, roja:3 };
+
+function severidadProporcional(valor, umbral){
+  const ratio = umbral ? valor / umbral : 1;
+  if (ratio >= ESCALA_PROPORCIONAL.rojaDesde) return "roja";
+  if (ratio >= ESCALA_PROPORCIONAL.naranjaDesde) return "naranja";
+  return "amarilla";
+}
+function severidadHelada(temp, region){
+  const niveles = HELADA_ESCALA[region] || HELADA_ESCALA["Los Lagos"];
+  if (temp <= niveles.roja) return "roja";
+  if (temp <= niveles.naranja) return "naranja";
+  return "amarilla";
+}
+function colorFinal(coloresIndividuales){
+  if (!coloresIndividuales.length) return "verde";
+  const cantidad = coloresIndividuales.length;
+  let pisoPorCantidad = "verde";
+  if (cantidad === 2) pisoPorCantidad = "naranja";
+  else if (cantidad >= 3) pisoPorCantidad = "roja";
+  const peorIndividual = coloresIndividuales.reduce((peor, actual) =>
+    PESO_COLOR[actual] > PESO_COLOR[peor] ? actual : peor, "verde");
+  return PESO_COLOR[pisoPorCantidad] > PESO_COLOR[peorIndividual] ? pisoPorCantidad : peorIndividual;
+}
+
 const REGIONES = [
   { region:"Los Lagos", comunas:[] },
   { region:"Aysén", comunas:[] },
@@ -325,48 +364,34 @@ function evaluar(nombre, d, region){
   const tormentaProxima = !!d.tormenta_proxima;
 
   const motivos = [];
-  let countAmarillas = 0;   // cuenta viento/ráfaga/lluvia/oleaje activas (NO la helada)
-  let esRoja = false;       // tormenta, o cualquier condición 30%+ sobre su umbral
-  let hayHelada = false;
+  const coloresIndividuales = [];
 
   if (viento != null && viento >= u.viento) {
     motivos.push(`Viento sostenido ${Math.round(viento)} km/h`);
-    countAmarillas++;
-    if (viento >= u.viento * 1.3) esRoja = true;
+    coloresIndividuales.push(severidadProporcional(viento, u.viento));
   }
   if (rafaga != null && rafaga >= u.rafaga) {
     motivos.push(`Ráfagas ${Math.round(rafaga)} km/h`);
-    countAmarillas++;
-    if (rafaga >= u.rafaga * 1.3) esRoja = true;
+    coloresIndividuales.push(severidadProporcional(rafaga, u.rafaga));
   }
   if (precip != null && precip >= u.precip) {
     motivos.push(`Lluvia ${Math.round(precip)} mm/24h`);
-    countAmarillas++;
-    if (precip >= u.precip * 1.3) esRoja = true;
+    coloresIndividuales.push(severidadProporcional(precip, u.precip));
   }
   if (ola != null && ola >= u.ola) {
     motivos.push(`Oleaje ${ola.toFixed(1)} m`);
-    countAmarillas++;
-    if (ola >= u.ola * 1.3) esRoja = true;
+    coloresIndividuales.push(severidadProporcional(ola, u.ola));
   }
   if (tminPrevista != null && tminPrevista <= u.tempMin) {
     motivos.push(`Mínima pronosticada ${Math.round(tminPrevista)}°C`);
-    hayHelada = true;
+    coloresIndividuales.push(severidadHelada(tminPrevista, region));
   }
   if (tormentaProxima) {
     motivos.push(`Tormenta eléctrica`);
-    countAmarillas++;  // sola es amarilla; si se suma a otra amarilla, sube a roja por el conteo
+    coloresIndividuales.push("naranja");  // sin valor numérico: sola siempre es naranja
   }
 
-  // 2 o más condiciones amarillas juntas (sin contar la helada) -> roja.
-  // La helada nunca cuenta para este "2 o más": helada + 1 amarilla (incluida
-  // la tormenta) se queda en amarilla; helada + 2 amarillas sí sube a roja.
-  if (countAmarillas >= 2) esRoja = true;
-
-  let estado = "verde";
-  if (esRoja) estado = "roja";
-  else if (countAmarillas >= 1) estado = "amarilla";
-  // si solo hayHelada (sin nada más), estado se queda en "verde" -> informativa
+  const estado = colorFinal(coloresIndividuales);
 
   return { estado, motivos, tempActual, viento, rafaga, humedad, sensacion, precip, tmin, tmax, direccionViento,
            codigoActual, proximasHoras, ola };
@@ -463,7 +488,7 @@ async function cargar(){
 }
 
 /* ---------- Render ---------- */
-let filtroEstado = null;  // null = sin filtro, o "roja"/"amarilla"/"informativa"/"verde" (sin alerta)
+let filtroEstado = null;  // null = sin filtro, o "roja"/"naranja"/"amarilla"/"verde" (sin alerta)
 
 function filtrarPorEstado(estado){
   filtroEstado = (filtroEstado === estado) ? null : estado;  // clic de nuevo = quitar filtro
@@ -473,15 +498,11 @@ function filtrarPorEstado(estado){
 
 function render(){
   // Resumen (siempre sobre el total, no sobre el filtro de búsqueda/estado).
-  // "verde" ahora se separa en dos: informativa (hay algo que leer, ej.
-  // helada) y sin alerta de verdad (sin ningún motivo).
-  const conteo = {roja:0, amarilla:0, informativa:0, verde:0};
-  TODAS.forEach(c => {
-    if (c.eval.estado === "roja") conteo.roja++;
-    else if (c.eval.estado === "amarilla") conteo.amarilla++;
-    else if (c.eval.motivos.length) conteo.informativa++;
-    else conteo.verde++;
-  });
+  // Con la escala unificada, "verde" ya solo significa "sin alerta" —ya no
+  // hay ambigüedad con la helada, que ahora usa el mismo criterio que el
+  // resto de las condiciones.
+  const conteo = {roja:0, naranja:0, amarilla:0, verde:0};
+  TODAS.forEach(c => conteo[c.eval.estado]++);
   const chip = (clave, label, colorVar) => {
     const activo = filtroEstado === clave;
     return `<span class="chip clickable ${activo?'activo':''}" onclick="filtrarPorEstado('${clave}')">
@@ -491,16 +512,14 @@ function render(){
   };
   document.getElementById("summary").innerHTML =
     chip("roja","rojas","var(--roja)")
+    + chip("naranja","naranjas","var(--naranja)")
     + chip("amarilla","amarillas","var(--amarilla)")
-    + chip("informativa","informativas","var(--verde)")
     + chip("verde","sin alerta","var(--muted)");
 
   const q = norm(document.getElementById("buscador")?.value || "");
   const coincide = c => {
     if (q && !norm(c.nombre).includes(q) && !norm(c.comuna||"").includes(q)) return false;
     if (!filtroEstado) return true;
-    if (filtroEstado === "informativa") return c.eval.estado === "verde" && c.eval.motivos.length > 0;
-    if (filtroEstado === "verde") return c.eval.estado === "verde" && c.eval.motivos.length === 0;
     return c.eval.estado === filtroEstado;
   };
 
@@ -517,11 +536,11 @@ function render(){
       const ev = c.eval, est = ev.estado;
       const badge = est !== "verde"
         ? `<span class="badge ${est}">${est}</span>`
-        : (ev.motivos.length ? `<span class="badge verde">Informativa</span>` : `<span class="badge ok">Sin alerta</span>`);
+        : `<span class="badge ok">Sin alerta</span>`;
       const motivos = [...ev.motivos];
       if(c.oficial) motivos.unshift(`SENAPRED${c.oficial.esRegional ? " (ATP región)" : ""}: ${c.oficial.causa}`);
       const motivosHtml = motivos.length
-        ? `<div class="reasons ${est==="roja"?"roja":""}">${motivos.join(" · ")}</div>` : "";
+        ? `<div class="reasons ${est==="roja"?"roja":est==="naranja"?"naranja":""}">${motivos.join(" · ")}</div>` : "";
 
       // Franja de próximas horas
       let horasHtml = "";
@@ -560,7 +579,7 @@ function render(){
     : `<div class="no-results">Sin resultados para "${document.getElementById("buscador")?.value || ""}"</div>`;
 }
 function filtrar(){ render(); }
-const peso = e => ({roja:3, amarilla:2, verde:1}[e] || 0);
+const peso = e => ({roja:4, naranja:3, amarilla:2, verde:1}[e] || 0);
 const fmt = (v,u) => v==null ? "—" : `${Math.round(v)} ${u}`;
 
 /* ---------- Arranque + auto-refresco ---------- */
