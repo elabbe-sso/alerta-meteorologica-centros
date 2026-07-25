@@ -598,7 +598,12 @@ def fetch_datos_consenso(lat: float, lon: float, horas_viento: int = 12, categor
     su lugar (2-3 llamadas HTTP en total en vez de 68 x 3). Ver api.py.
     """
     fuentes_datos = []
-    for fn in (fetch_datos_open_meteo, fetch_datos_yr, fetch_datos_open_meteo_icon):
+    # DWD ICON se sacó del consenso (ver nota en api.py): aportaba el peor
+    # caso de viento entre modelos, pero a costa de duplicar el peso del
+    # pedido a Open-Meteo, que ya venía dando 429 constantes. Se deja fuera
+    # también acá para que el correo y la app usen exactamente las mismas
+    # fuentes y no muestren cifras distintas del mismo punto.
+    for fn in (fetch_datos_open_meteo, fetch_datos_yr):
         try:
             d = fn(lat, lon, horas_viento)
             if d:
