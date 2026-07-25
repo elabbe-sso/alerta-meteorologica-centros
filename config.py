@@ -106,7 +106,15 @@ UMBRALES_CAUDAL_POR_PUNTO = {
     "Liquiñe": {"amarilla": 20, "naranja": 30, "roja": 40},
     "Trafún": {"amarilla": 130, "naranja": 200, "roja": 300},
     "Hueyusca": {"amarilla": 3, "naranja": 4.5, "roja": 7},
-    "Esperanza": {"amarilla": 15, "naranja": 25, "roja": 40},
+    # OJO: la API (resolución de 5 km) no engancha el Estero Esperanza en sí,
+    # sino un curso de agua mayor de la misma cuenca -- se verificó porque
+    # daba valores ~17x mayores que Hueyusca, que está aguas ABAJO y debería
+    # ser mayor, no menor. Se probó desplazar la coordenada ~600 m sin efecto
+    # (cae en la misma celda de la grilla). Estos umbrales están calibrados
+    # sobre lo que la API SÍ entrega, así que la alerta funciona como señal
+    # de crecida de la cuenca, no como medición del estero: el número que se
+    # muestra NO es el caudal real del Estero Esperanza.
+    "Esperanza": {"amarilla": 50, "naranja": 70, "roja": 110},
     "Rahue": {"amarilla": 150, "naranja": 250, "roja": 320},
     "Santa Juana": {"amarilla": 150, "naranja": 250, "roja": 320},
 }
