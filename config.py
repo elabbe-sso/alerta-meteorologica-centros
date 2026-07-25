@@ -15,7 +15,6 @@ sin tocar el resto del código.
 # Regiones a cubrir (para matchear contra las alertas oficiales de SENAPRED)
 # -----------------------------------------------------------------------
 REGIONES = [
-    "Los Ríos",
     "Los Lagos",
     "Aysén",
     "Magallanes",
@@ -31,16 +30,12 @@ COMUNAS_POR_REGION = {
     "Los Lagos": [
         "Puerto Montt", "Calbuco", "Quemchi", "Castro",
         "Achao", "Chonchi", "Quellón", "Hornopirén",
-        "San Pablo", "Purranque", "Fresia", "Osorno",
     ],
     "Aysén": [
         "Puerto Cisnes", "Puerto Aguirre", "Puerto Chacabuco",
     ],
     "Magallanes": [
         "Río Verde",
-    ],
-    "Los Ríos": [
-        "Panguipulli",
     ],
 }
 
@@ -91,40 +86,6 @@ HELADA_ESCALA = {
     "Magallanes": {"naranja": -4.0, "roja": -6.0},
 }
 
-# -----------------------------------------------------------------------
-# CAUDAL DE RÍO (solo para instalaciones en TIERRA, categoria="tierra")
-# -----------------------------------------------------------------------
-# A diferencia de viento/ráfaga/lluvia/oleaje, NO es proporcional a un
-# único umbral base -- cada río es tan distinto (uno chico puede fluir
-# normalmente a 2 m³/s, uno grande a 200 m³/s) que un solo "% sobre lo
-# normal" no tiene sentido de forma automática. En su lugar, cada
-# instalación en tierra tiene 3 valores FIJOS propios en m³/s (mismo
-# estilo que HELADA_ESCALA): desde dónde empieza cada color. Sin entrada
-# acá, ese punto no genera ninguna alerta de caudal (aunque sí las demás:
-# viento, ráfaga, lluvia, helada, tormenta).
-UMBRALES_CAUDAL_POR_PUNTO = {
-    "Liquiñe": {"amarilla": 20, "naranja": 30, "roja": 40},
-    "Trafún": {"amarilla": 130, "naranja": 200, "roja": 300},
-    "Hueyusca": {"amarilla": 3, "naranja": 4.5, "roja": 7},
-    # OJO: la API (resolución de 5 km) no engancha el Estero Esperanza en sí,
-    # sino un curso de agua mayor de la misma cuenca -- se verificó porque
-    # daba valores ~17x mayores que Hueyusca, que está aguas ABAJO y debería
-    # ser mayor, no menor. Se probó desplazar la coordenada ~600 m sin efecto
-    # (cae en la misma celda de la grilla). Estos umbrales están calibrados
-    # sobre lo que la API SÍ entrega, así que la alerta funciona como señal
-    # de crecida de la cuenca, no como medición del estero: el número que se
-    # muestra NO es el caudal real del Estero Esperanza.
-    "Esperanza": {"amarilla": 50, "naranja": 70, "roja": 110},
-    "Rahue": {"amarilla": 150, "naranja": 250, "roja": 320},
-    "Santa Juana": {"amarilla": 150, "naranja": 250, "roja": 320},
-}
-
-
-def obtener_umbral_caudal(nombre_punto: str) -> dict | None:
-    """None si el punto no tiene umbrales de caudal definidos (ej. es un
-    punto marino, o es de tierra pero todavía no se configuraron)."""
-    return UMBRALES_CAUDAL_POR_PUNTO.get(nombre_punto)
-
 
 def obtener_umbrales(comuna: str) -> dict:
     """Devuelve los umbrales aplicables a una comuna, aplicando overrides."""
@@ -143,83 +104,76 @@ def obtener_umbrales(comuna: str) -> dict:
 # Formato: (nombre, lat, lon, comuna_de_referencia, region)
 # -----------------------------------------------------------------------
 PUNTOS_ESPECIFICOS = [
-    ("Abtao", -41.79944, -73.36083, "Calbuco", "Los Lagos", "mar", "centro"),
-    ("Acopio Chinquihue", -41.51607, -73.02722, "Puerto Montt", "Los Lagos", "mar", "centro"),
-    ("Acopio Quemchi", -42.1475, -73.48111, "Quemchi", "Los Lagos", "mar", "centro"),
-    ("Aguantao", -42.52, -73.58583, "Castro", "Los Lagos", "mar", "centro"),
-    ("Aldunate", -44.3275, -72.89833, "Puerto Cisnes", "Aysén", "mar", "centro"),
-    ("Aulen", -41.85068, -72.81142, "Hornopirén", "Los Lagos", "mar", "centro"),
-    ("Bertrand", -52.81687, -72.43779, "Río Verde", "Magallanes", "mar", "centro"),
-    ("Buill", -42.43716, -72.70246, "Hornopirén", "Los Lagos", "mar", "centro"),
-    ("Cachihue", -42.30047, -73.0669, "Quemchi", "Los Lagos", "mar", "centro"),
-    ("Calen 1", -42.33139, -73.44444, "Quemchi", "Los Lagos", "mar", "centro"),
-    ("Calen 2", -42.3475, -73.47889, "Quemchi", "Los Lagos", "mar", "centro"),
-    ("Caleta Soledad", -42.36444, -72.48806, "Hornopirén", "Los Lagos", "mar", "centro"),
-    ("Canal Contreras", -52.775, -72.59722, "Río Verde", "Magallanes", "mar", "centro"),
-    ("Caniglia 2", -45.41667, -74.07056, "Puerto Chacabuco", "Aysén", "mar", "centro"),
-    ("Caucahue", -42.11222, -73.425, "Quemchi", "Los Lagos", "mar", "centro"),
-    ("Chauco", -42.925, -73.59333, "Quellón", "Los Lagos", "mar", "centro"),
-    ("Chaullin Norte", -43.03417, -73.44694, "Quellón", "Los Lagos", "mar", "centro"),
-    ("Chaullin Sur", -43.0975, -73.41639, "Quellón", "Los Lagos", "mar", "centro"),
-    ("Chaullin Weste", -43.05667, -73.46028, "Quellón", "Los Lagos", "mar", "centro"),
-    ("Chidhuapi 1", -41.81556, -73.11667, "Calbuco", "Los Lagos", "mar", "centro"),
-    ("Chidhuapi 2", -41.85389, -73.08417, "Calbuco", "Los Lagos", "mar", "centro"),
-    ("Chidhuapi 3", -41.85278, -73.05306, "Calbuco", "Los Lagos", "mar", "centro"),
-    ("Chidhuapi 4", -41.83111, -73.11306, "Calbuco", "Los Lagos", "mar", "centro"),
-    ("Chope", -41.79667, -73.10806, "Calbuco", "Los Lagos", "mar", "centro"),
-    ("Churrecue", -45.35667, -73.54111, "Puerto Chacabuco", "Aysén", "mar", "centro"),
-    ("Colaco 4", -41.77333, -73.35194, "Calbuco", "Los Lagos", "mar", "centro"),
-    ("Darsena", -52.58833, -72.36444, "Río Verde", "Magallanes", "mar", "centro"),
-    ("Darsena Norte", -52.58842, -72.36446, "Río Verde", "Magallanes", "mar", "centro"),
-    ("Desembocadura", -52.73809, -72.63738, "Río Verde", "Magallanes", "mar", "centro"),
-    ("Ducañas", -42.25232, -73.17865, "Quemchi", "Los Lagos", "mar", "centro"),
-    ("El Manzano", -42.02544, -72.65009, "Hornopirén", "Los Lagos", "mar", "centro"),
-    ("Ensenada Rys", -52.56111, -72.34194, "Río Verde", "Magallanes", "mar", "centro"),
-    ("Esperanza", -41.09765, -73.70959, "Fresia", "Los Lagos", "tierra", "piscicultura"),
-    ("Estero", -52.85621, -72.57773, "Río Verde", "Magallanes", "mar", "centro"),
-    ("Estero Conche", -44.42361, -72.78222, "Puerto Cisnes", "Aysén", "mar", "centro"),
-    ("Furia", -52.62306, -72.41056, "Río Verde", "Magallanes", "mar", "centro"),
-    ("Hueyusca", -40.92504, -73.56042, "Purranque", "Los Lagos", "tierra", "piscicultura"),
-    ("Imelev", -42.61528, -73.41472, "Achao", "Los Lagos", "mar", "centro"),
-    ("Isla García", -52.83816, -72.53191, "Río Verde", "Magallanes", "mar", "centro"),
-    ("Isla Tac", -42.40143, -73.15192, "Quemchi", "Los Lagos", "mar", "centro"),
-    ("Jacaff", -44.30444, -72.94333, "Puerto Cisnes", "Aysén", "mar", "centro"),
-    ("Linguar", -42.05881, -72.62749, "Hornopirén", "Los Lagos", "mar", "centro"),
-    ("Linlinao", -42.56917, -73.74806, "Chonchi", "Los Lagos", "mar", "centro"),
-    ("Liquiñe", -39.69421, -71.88259, "Panguipulli", "Los Ríos", "tierra", "piscicultura"),
-    ("Llancacheo", -41.74914, -73.03428, "Calbuco", "Los Lagos", "mar", "centro"),
-    ("Luchin", -45.04851, -73.40206, "Puerto Aguirre", "Aysén", "mar", "centro"),
-    ("Macetero", -44.44694, -72.81222, "Puerto Cisnes", "Aysén", "mar", "centro"),
-    ("Malomacum", -42.04795, -72.62711, "Hornopirén", "Los Lagos", "mar", "centro"),
-    ("Matilde", -45.48421, -74.20692, "Puerto Chacabuco", "Aysén", "mar", "centro"),
-    ("Navarro", -52.89667, -72.7097, "Río Verde", "Magallanes", "mar", "centro"),
-    ("PCC", -41.77938, -73.52419, "Calbuco", "Los Lagos", "mar", "piscicultura"),
-    ("Pollollo", -41.80652, -73.00925, "Calbuco", "Los Lagos", "mar", "centro"),
-    ("Punta Gruesa", -42.21001, -72.64493, "Hornopirén", "Los Lagos", "mar", "centro"),
-    ("Punta Isla", -52.7713, -72.36162, "Río Verde", "Magallanes", "mar", "centro"),
-    ("Punta Laura", -52.66806, -72.42111, "Río Verde", "Magallanes", "mar", "centro"),
-    ("Punta Laura Norte", -52.64694, -72.40667, "Río Verde", "Magallanes", "mar", "centro"),
-    ("Punta Victoria", -45.34944, -73.46667, "Puerto Chacabuco", "Aysén", "mar", "centro"),
-    ("Punta Yoye", -42.86639, -73.67944, "Quellón", "Los Lagos", "mar", "centro"),
-    ("Quilen", -42.9875, -73.54278, "Quellón", "Los Lagos", "mar", "centro"),
-    ("Rahue", -40.76553, -72.93064, "Osorno", "Los Lagos", "tierra", "piscicultura"),
-    ("Reñihue", -42.52386, -72.66882, "Hornopirén", "Los Lagos", "mar", "centro"),
-    ("Santa Juana", -40.7587, -72.96925, "Osorno", "Los Lagos", "tierra", "piscicultura"),
-    ("Sector 3", -42.46222, -73.25611, "Puerto Cisnes", "Aysén", "mar", "centro"),
-    ("Sur Este", -41.77959, -73.01941, "Calbuco", "Los Lagos", "mar", "centro"),
-    ("Teupa", -42.67972, -73.66972, "Chonchi", "Los Lagos", "mar", "centro"),
-    ("Trafún", -40.46944, -72.90497, "San Pablo", "Los Lagos", "tierra", "piscicultura"),
-    ("Tranqui I", -42.99806, -73.43583, "Quellón", "Los Lagos", "mar", "centro"),
-    ("Tranqui II", -43.00278, -73.39444, "Quellón", "Los Lagos", "mar", "centro"),
-    ("Transito", -44.8375, -73.60889, "Puerto Cisnes", "Aysén", "mar", "centro"),
-    ("Tubildad", -42.12528, -73.46944, "Quemchi", "Los Lagos", "mar", "centro"),
-    ("Unicornio", -52.62889, -72.3725, "Río Verde", "Magallanes", "mar", "centro"),
-    ("Unicornio Sur", -52.63528, -72.39417, "Río Verde", "Magallanes", "mar", "centro"),
-    ("Vilupulli", -42.60111, -73.77528, "Chonchi", "Los Lagos", "mar", "centro"),
-    ("Voigue", -42.30072, -73.20496, "Quemchi", "Los Lagos", "mar", "centro"),
-    ("Weste Isla Luz", -45.48806, -74.09333, "Puerto Chacabuco", "Aysén", "mar", "centro"),
-    ("Yelcho", -43.21472, -73.58028, "Quellón", "Los Lagos", "mar", "centro"),
-    ("Zañartu", -44.4125, -72.79306, "Puerto Cisnes", "Aysén", "mar", "centro"),
+    ("Abtao", -41.79944, -73.36083, "Calbuco", "Los Lagos"),
+    ("Acopio Chinquihue", -41.51607, -73.02722, "Puerto Montt", "Los Lagos"),
+    ("Acopio Quemchi", -42.1475, -73.48111, "Quemchi", "Los Lagos"),
+    ("Aguantao", -42.52, -73.58583, "Castro", "Los Lagos"),
+    ("Aldunate", -44.3275, -72.89833, "Puerto Cisnes", "Aysén"),
+    ("Aulen", -41.85068, -72.81142, "Hornopirén", "Los Lagos"),
+    ("Bertrand", -52.81687, -72.43779, "Río Verde", "Magallanes"),
+    ("Buill", -42.43716, -72.70246, "Hornopirén", "Los Lagos"),
+    ("Cachihue", -42.30047, -73.0669, "Quemchi", "Los Lagos"),
+    ("Calen 1", -42.33139, -73.44444, "Quemchi", "Los Lagos"),
+    ("Calen 2", -42.3475, -73.47889, "Quemchi", "Los Lagos"),
+    ("Caleta Soledad", -42.36444, -72.48806, "Hornopirén", "Los Lagos"),
+    ("Canal Contreras", -52.775, -72.59722, "Río Verde", "Magallanes"),
+    ("Caniglia 2", -45.41667, -74.07056, "Puerto Chacabuco", "Aysén"),
+    ("Caucahue", -42.11222, -73.425, "Quemchi", "Los Lagos"),
+    ("Chauco", -42.925, -73.59333, "Quellón", "Los Lagos"),
+    ("Chaullin Norte", -43.03417, -73.44694, "Quellón", "Los Lagos"),
+    ("Chaullin Sur", -43.0975, -73.41639, "Quellón", "Los Lagos"),
+    ("Chaullin Weste", -43.05667, -73.46028, "Quellón", "Los Lagos"),
+    ("Chidhuapi 1", -41.81556, -73.11667, "Calbuco", "Los Lagos"),
+    ("Chidhuapi 2", -41.85389, -73.08417, "Calbuco", "Los Lagos"),
+    ("Chidhuapi 3", -41.85278, -73.05306, "Calbuco", "Los Lagos"),
+    ("Chidhuapi 4", -41.83111, -73.11306, "Calbuco", "Los Lagos"),
+    ("Chope", -41.79667, -73.10806, "Calbuco", "Los Lagos"),
+    ("Churrecue", -45.35667, -73.54111, "Puerto Chacabuco", "Aysén"),
+    ("Colaco 4", -41.77333, -73.35194, "Calbuco", "Los Lagos"),
+    ("Darsena", -52.58833, -72.36444, "Río Verde", "Magallanes"),
+    ("Darsena Norte", -52.58842, -72.36446, "Río Verde", "Magallanes"),
+    ("Desembocadura", -52.73809, -72.63738, "Río Verde", "Magallanes"),
+    ("Ducañas", -42.25232, -73.17865, "Quemchi", "Los Lagos"),
+    ("El Manzano", -42.02544, -72.65009, "Hornopirén", "Los Lagos"),
+    ("Ensenada Rys", -52.56111, -72.34194, "Río Verde", "Magallanes"),
+    ("Estero", -52.85621, -72.57773, "Río Verde", "Magallanes"),
+    ("Estero Conche", -44.42361, -72.78222, "Puerto Cisnes", "Aysén"),
+    ("Furia", -52.62306, -72.41056, "Río Verde", "Magallanes"),
+    ("Imelev", -42.61528, -73.41472, "Achao", "Los Lagos"),
+    ("Isla García", -52.83816, -72.53191, "Río Verde", "Magallanes"),
+    ("Isla Tac", -42.40143, -73.15192, "Quemchi", "Los Lagos"),
+    ("Jacaff", -44.30444, -72.94333, "Puerto Cisnes", "Aysén"),
+    ("Linguar", -42.05881, -72.62749, "Hornopirén", "Los Lagos"),
+    ("Linlinao", -42.56917, -73.74806, "Chonchi", "Los Lagos"),
+    ("Llancacheo", -41.74914, -73.03428, "Calbuco", "Los Lagos"),
+    ("Luchin", -45.04851, -73.40206, "Puerto Aguirre", "Aysén"),
+    ("Macetero", -44.44694, -72.81222, "Puerto Cisnes", "Aysén"),
+    ("Malomacum", -42.04795, -72.62711, "Hornopirén", "Los Lagos"),
+    ("Matilde", -45.48421, -74.20692, "Puerto Chacabuco", "Aysén"),
+    ("Navarro", -52.89667, -72.7097, "Río Verde", "Magallanes"),
+    ("Pollollo", -41.80652, -73.00925, "Calbuco", "Los Lagos"),
+    ("Punta Gruesa", -42.21001, -72.64493, "Hornopirén", "Los Lagos"),
+    ("Punta Isla", -52.7713, -72.36162, "Río Verde", "Magallanes"),
+    ("Punta Laura", -52.66806, -72.42111, "Río Verde", "Magallanes"),
+    ("Punta Laura Norte", -52.64694, -72.40667, "Río Verde", "Magallanes"),
+    ("Punta Victoria", -45.34944, -73.46667, "Puerto Chacabuco", "Aysén"),
+    ("Punta Yoye", -42.86639, -73.67944, "Quellón", "Los Lagos"),
+    ("Quilen", -42.9875, -73.54278, "Quellón", "Los Lagos"),
+    ("Reñihue", -42.52386, -72.66882, "Hornopirén", "Los Lagos"),
+    ("Sector 3", -42.46222, -73.25611, "Puerto Cisnes", "Aysén"),
+    ("Sur Este", -41.77959, -73.01941, "Calbuco", "Los Lagos"),
+    ("Teupa", -42.67972, -73.66972, "Chonchi", "Los Lagos"),
+    ("Tranqui I", -42.99806, -73.43583, "Quellón", "Los Lagos"),
+    ("Tranqui II", -43.00278, -73.39444, "Quellón", "Los Lagos"),
+    ("Transito", -44.8375, -73.60889, "Puerto Cisnes", "Aysén"),
+    ("Tubildad", -42.12528, -73.46944, "Quemchi", "Los Lagos"),
+    ("Unicornio", -52.62889, -72.3725, "Río Verde", "Magallanes"),
+    ("Unicornio Sur", -52.63528, -72.39417, "Río Verde", "Magallanes"),
+    ("Vilupulli", -42.60111, -73.77528, "Chonchi", "Los Lagos"),
+    ("Voigue", -42.30072, -73.20496, "Quemchi", "Los Lagos"),
+    ("Weste Isla Luz", -45.48806, -74.09333, "Puerto Chacabuco", "Aysén"),
+    ("Yelcho", -43.21472, -73.58028, "Quellón", "Los Lagos"),
+    ("Zañartu", -44.4125, -72.79306, "Puerto Cisnes", "Aysén"),
 ]
 
 
@@ -244,11 +198,6 @@ def obtener_umbrales_punto(nombre_punto: str) -> dict:
     return umbrales
 
 
-def obtener_categoria_punto(nombre_punto: str) -> str:
-    """"mar" o "tierra" -- decide si el punto usa oleaje o caudal de río."""
-    return next((p[5] for p in PUNTOS_ESPECIFICOS if p[0] == nombre_punto), "mar")
-
-
 def validar_comunas_de_puntos() -> list[str]:
     """
     Revisa que cada PUNTO ESPECÍFICO esté vinculado a una comuna que
@@ -257,7 +206,7 @@ def validar_comunas_de_puntos() -> list[str]:
     Útil para correr tras editar el archivo, antes de desplegar.
     """
     problemas = []
-    for nombre, lat, lon, comuna_ref, region, categoria, tipo in PUNTOS_ESPECIFICOS:
+    for nombre, lat, lon, comuna_ref, region in PUNTOS_ESPECIFICOS:
         comunas_de_la_region = COMUNAS_POR_REGION.get(region)
         if comunas_de_la_region is None:
             problemas.append(f"{nombre}: la región '{region}' no existe en COMUNAS_POR_REGION")
