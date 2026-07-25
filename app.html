@@ -189,7 +189,10 @@ const UMBRAL_CAUDAL_POR_PUNTO = {
   "Liquiñe": { amarilla: 20, naranja: 30, roja: 40 },
   "Trafún": { amarilla: 130, naranja: 200, roja: 300 },
   "Hueyusca": { amarilla: 3, naranja: 4.5, roja: 7 },
-  "Esperanza": { amarilla: 15, naranja: 25, roja: 40 },
+  // OJO: en Esperanza la API no engancha el estero en sí sino un curso de
+  // agua mayor de la misma cuenca (ver nota en config.py). El caudal que se
+  // muestra es referencial de la cuenca, no la medición del estero.
+  "Esperanza": { amarilla: 50, naranja: 70, roja: 110 },
   "Rahue": { amarilla: 150, naranja: 250, roja: 320 },
   "Santa Juana": { amarilla: 150, naranja: 250, roja: 320 },
 };
