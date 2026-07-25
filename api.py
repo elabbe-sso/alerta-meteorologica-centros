@@ -38,8 +38,8 @@ from flask import Flask, jsonify
 from config import PUNTOS_ESPECIFICOS
 from fuentes import (
     fetch_datos_open_meteo_batch,
+    fetch_datos_open_meteo_icon_batch,
     fetch_datos_marino_batch,
-    fetch_datos_caudal_batch,
     fetch_datos_yr,
     _combinar_fuentes,
 )
@@ -55,6 +55,16 @@ MAX_HILOS = 12
 # 15 min, no hace falta refrescar más seguido que eso.
 CACHE_TTL_SEGUNDOS = 15 * 60
 
+# Campos que SOLO entrega Open-Meteo base (yr.no no los tiene) y que son
+# puramente informativos: no entran en el cálculo de ninguna alerta -- ver
+# reglas.py, que solo mira viento, ráfagas, lluvia, helada, oleaje y
+# tormenta. Por eso se pueden arrastrar desde la lectura anterior cuando
+# Open-Meteo falla, sin riesgo de inventar una alerta con datos viejos.
+CAMPOS_VISUALIZACION = (
+    "humedad", "sensacion_c", "direccion_viento", "codigo_actual",
+    "tmin_dia_c", "tmax_dia_c", "proximas_horas",
+)
+
 _cache_lock = threading.Lock()
 _cache: dict = {"datos": {}, "actualizado_en": 0.0}
 
@@ -62,47 +72,26 @@ _cache: dict = {"datos": {}, "actualizado_en": 0.0}
 def _refrescar_cache() -> None:
     puntos_coords = [(p[1], p[2]) for p in PUNTOS_ESPECIFICOS]  # [(lat, lon), ...]
 
-    # 2 llamadas a Open-Meteo (base + oleaje/caudal) para todos los puntos,
-    # en vez de una por punto. Si una fuente completa falla, se sigue con
-    # las demás.
-    #
-    # DWD ICON se sacó a propósito: repetía casi el mismo pedido completo
-    # (77 ubicaciones x 6 variables horarias x 48 horas) solo para aportar
-    # el peor caso de viento/ráfaga entre modelos, y era cerca de la mitad
-    # del peso total que Open-Meteo nos cobra. Con los 429 constantes por la
-    # IP compartida de Render, ese costo dejó de justificarse: el viento
-    # sigue saliendo del consenso entre Open-Meteo y yr.no (dos modelos),
-    # solo un poco menos conservador en los picos.
+    # Solo 3 llamadas HTTP en total para todos los puntos (Open-Meteo base,
+    # DWD ICON, Marine) -- en vez de una por punto y por fuente. Si una
+    # fuente completa falla, se sigue con las demás.
     try:
         om_lote = fetch_datos_open_meteo_batch(puntos_coords, horas_viento=12)
     except Exception as e:
         print(f"[api.py] fetch_datos_open_meteo_batch falló: {e}")
         om_lote = [None] * len(puntos_coords)
 
-    # Oleaje (mar) y caudal (tierra) van a fuentes distintas -- se separan
-    # los puntos por categoría para no pedirle oleaje a un río ni caudal a
-    # un centro marino.
-    indices_mar = [i for i, p in enumerate(PUNTOS_ESPECIFICOS) if p[5] != "tierra"]
-    indices_tierra = [i for i, p in enumerate(PUNTOS_ESPECIFICOS) if p[5] == "tierra"]
-    coords_mar = [puntos_coords[i] for i in indices_mar]
-    coords_tierra = [puntos_coords[i] for i in indices_tierra]
-
-    marino_lote: list = [None] * len(puntos_coords)
     try:
-        parcial = fetch_datos_marino_batch(coords_mar)
-        for idx, valor in zip(indices_mar, parcial):
-            marino_lote[idx] = valor
+        icon_lote = fetch_datos_open_meteo_icon_batch(puntos_coords, horas_viento=12)
+    except Exception as e:
+        print(f"[api.py] fetch_datos_open_meteo_icon_batch falló: {e}")
+        icon_lote = [None] * len(puntos_coords)
+
+    try:
+        marino_lote = fetch_datos_marino_batch(puntos_coords)
     except Exception as e:
         print(f"[api.py] fetch_datos_marino_batch falló: {e}")
-
-    caudal_lote: list = [None] * len(puntos_coords)
-    if coords_tierra:
-        try:
-            parcial = fetch_datos_caudal_batch(coords_tierra)
-            for idx, valor in zip(indices_tierra, parcial):
-                caudal_lote[idx] = valor
-        except Exception as e:
-            print(f"[api.py] fetch_datos_caudal_batch falló: {e}")
+        marino_lote = [None] * len(puntos_coords)
 
     # yr.no: host distinto (api.met.no), no está implicado en el límite de
     # Open-Meteo -- se mantiene por punto, en paralelo para no demorar.
@@ -121,22 +110,31 @@ def _refrescar_cache() -> None:
             yr_lote[idx] = datos_yr
 
     sin_ola = {"altura_ola_actual_m": None, "altura_ola_max_m": None}
-    sin_caudal = {"caudal_actual_m3s": None, "caudal_max_prevista_m3s": None}
     datos_previos = _cache["datos"]  # lo que ya había guardado, por si este refresco falla
 
     resultado: dict = {}
     for i, punto in enumerate(PUNTOS_ESPECIFICOS):
-        nombre, lat, lon, comuna, region, categoria, tipo = punto
-        fuentes_punto = [d for d in (om_lote[i], yr_lote[i]) if d]
+        nombre, lat, lon, comuna, region = punto
+        fuentes_punto = [d for d in (om_lote[i], yr_lote[i], icon_lote[i]) if d]
         try:
             datos = _combinar_fuentes(fuentes_punto)
-            if categoria == "tierra":
-                datos.update(caudal_lote[i] or sin_caudal)
-            else:
-                datos.update(marino_lote[i] or sin_ola)
+            datos.update(marino_lote[i] or sin_ola)
+
+            # Si Open-Meteo base falló (429) pero yr.no sí respondió, el punto
+            # se actualiza igual con el viento/lluvia de yr.no -- pero los
+            # campos de CAMPOS_VISUALIZACION llegarían vacíos y borrarían los
+            # de la lectura anterior (era el motivo de ver humedad, sensación
+            # térmica, mín/máx y la flecha en "—" mientras el viento sí tenía
+            # valor). Se rellenan desde el último dato bueno.
+            anterior = datos_previos.get(nombre)
+            if anterior and "error" not in anterior:
+                for campo in CAMPOS_VISUALIZACION:
+                    valor = datos.get(campo)
+                    if (valor is None or valor == []) and anterior.get(campo) is not None:
+                        datos[campo] = anterior[campo]
+
             datos["comuna"] = comuna
             datos["region"] = region
-            datos["categoria"] = categoria
             datos["lat"] = lat
             datos["lon"] = lon
             resultado[nombre] = datos
