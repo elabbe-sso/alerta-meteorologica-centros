@@ -181,27 +181,6 @@ const HELADA_ESCALA = {
   "Magallanes": { naranja: -4.0, roja: -6.0 },
 };
 
-// Caudal de río (solo instalaciones en tierra, categoria="tierra") -- 3
-// valores FIJOS en m³/s por punto (no proporcional, cada río es distinto).
-// Mismo listado que UMBRALES_CAUDAL_POR_PUNTO en config.py. Sin entrada
-// acá, ese punto no genera alerta de caudal (aunque sí las demás).
-const UMBRAL_CAUDAL_POR_PUNTO = {
-  "Liquiñe": { amarilla: 20, naranja: 30, roja: 40 },
-  "Trafún": { amarilla: 130, naranja: 200, roja: 300 },
-  "Hueyusca": { amarilla: 3, naranja: 4.5, roja: 7 },
-  // OJO: en Esperanza la API no engancha el estero en sí sino un curso de
-  // agua mayor de la misma cuenca (ver nota en config.py). El caudal que se
-  // muestra es referencial de la cuenca, no la medición del estero.
-  "Esperanza": { amarilla: 50, naranja: 70, roja: 110 },
-  "Rahue": { amarilla: 150, naranja: 250, roja: 320 },
-  "Santa Juana": { amarilla: 150, naranja: 250, roja: 320 },
-};
-function severidadCaudal(caudal, umbralesPunto){
-  if (caudal >= umbralesPunto.roja) return "roja";
-  if (caudal >= umbralesPunto.naranja) return "naranja";
-  return "amarilla";
-}
-
 const PESO_COLOR = { verde:0, amarilla:1, naranja:2, roja:3 };
 
 function severidadProporcional(valor, umbral){
@@ -228,7 +207,6 @@ function colorFinal(coloresIndividuales){
 }
 
 const REGIONES = [
-  { region:"Los Ríos", comunas:[] },
   { region:"Los Lagos", comunas:[] },
   { region:"Aysén", comunas:[] },
   { region:"Magallanes", comunas:[] },
@@ -238,10 +216,9 @@ const REGIONES = [
 // COMUNAS_POR_REGION en config.py. Referencia de qué comunas son válidas
 // para el 5° campo de cada punto en PUNTOS_ESPECIFICOS.
 const COMUNAS_POR_REGION = {
-  "Los Lagos": ["Puerto Montt","Calbuco","Quemchi","Castro","Achao","Chonchi","Quellón","Hornopirén","San Pablo","Purranque","Fresia","Osorno"],
+  "Los Lagos": ["Puerto Montt","Calbuco","Quemchi","Castro","Achao","Chonchi","Quellón","Hornopirén"],
   "Aysén": ["Puerto Cisnes","Puerto Aguirre","Puerto Chacabuco"],
   "Magallanes": ["Río Verde"],
-  "Los Ríos": ["Panguipulli"],
 };
 
 // PUNTOS ESPECÍFICOS: coordenadas exactas más allá del centro de la comuna
@@ -249,87 +226,80 @@ const COMUNAS_POR_REGION = {
 // Formato: [nombre, lat, lon, region, comuna_de_referencia]. Agrega los tuyos aquí.
 // Cada uno puede tener su propio umbral en OVERRIDE usando su nombre exacto.
 const PUNTOS_ESPECIFICOS = [
-  ["Abtao", -41.79944, -73.36083, "Los Lagos", "Calbuco", "mar", "centro"],
-  ["Acopio Chinquihue", -41.51607, -73.02722, "Los Lagos", "Puerto Montt", "mar", "centro"],
-  ["Acopio Quemchi", -42.1475, -73.48111, "Los Lagos", "Quemchi", "mar", "centro"],
-  ["Aguantao", -42.52, -73.58583, "Los Lagos", "Castro", "mar", "centro"],
-  ["Aldunate", -44.3275, -72.89833, "Aysén", "Puerto Cisnes", "mar", "centro"],
-  ["Aulen", -41.85068, -72.81142, "Los Lagos", "Hornopirén", "mar", "centro"],
-  ["Bertrand", -52.81687, -72.43779, "Magallanes", "Río Verde", "mar", "centro"],
-  ["Buill", -42.43716, -72.70246, "Los Lagos", "Hornopirén", "mar", "centro"],
-  ["Cachihue", -42.30047, -73.0669, "Los Lagos", "Quemchi", "mar", "centro"],
-  ["Calen 1", -42.33139, -73.44444, "Los Lagos", "Quemchi", "mar", "centro"],
-  ["Calen 2", -42.3475, -73.47889, "Los Lagos", "Quemchi", "mar", "centro"],
-  ["Caleta Soledad", -42.36444, -72.48806, "Los Lagos", "Hornopirén", "mar", "centro"],
-  ["Canal Contreras", -52.775, -72.59722, "Magallanes", "Río Verde", "mar", "centro"],
-  ["Caniglia 2", -45.41667, -74.07056, "Aysén", "Puerto Chacabuco", "mar", "centro"],
-  ["Caucahue", -42.11222, -73.425, "Los Lagos", "Quemchi", "mar", "centro"],
-  ["Chauco", -42.925, -73.59333, "Los Lagos", "Quellón", "mar", "centro"],
-  ["Chaullin Norte", -43.03417, -73.44694, "Los Lagos", "Quellón", "mar", "centro"],
-  ["Chaullin Sur", -43.0975, -73.41639, "Los Lagos", "Quellón", "mar", "centro"],
-  ["Chaullin Weste", -43.05667, -73.46028, "Los Lagos", "Quellón", "mar", "centro"],
-  ["Chidhuapi 1", -41.81556, -73.11667, "Los Lagos", "Calbuco", "mar", "centro"],
-  ["Chidhuapi 2", -41.85389, -73.08417, "Los Lagos", "Calbuco", "mar", "centro"],
-  ["Chidhuapi 3", -41.85278, -73.05306, "Los Lagos", "Calbuco", "mar", "centro"],
-  ["Chidhuapi 4", -41.83111, -73.11306, "Los Lagos", "Calbuco", "mar", "centro"],
-  ["Chope", -41.79667, -73.10806, "Los Lagos", "Calbuco", "mar", "centro"],
-  ["Churrecue", -45.35667, -73.54111, "Aysén", "Puerto Chacabuco", "mar", "centro"],
-  ["Colaco 4", -41.77333, -73.35194, "Los Lagos", "Calbuco", "mar", "centro"],
-  ["Darsena", -52.58833, -72.36444, "Magallanes", "Río Verde", "mar", "centro"],
-  ["Darsena Norte", -52.58842, -72.36446, "Magallanes", "Río Verde", "mar", "centro"],
-  ["Desembocadura", -52.73809, -72.63738, "Magallanes", "Río Verde", "mar", "centro"],
-  ["Ducañas", -42.25232, -73.17865, "Los Lagos", "Quemchi", "mar", "centro"],
-  ["El Manzano", -42.02544, -72.65009, "Los Lagos", "Hornopirén", "mar", "centro"],
-  ["Ensenada Rys", -52.56111, -72.34194, "Magallanes", "Río Verde", "mar", "centro"],
-  ["Esperanza", -41.09765, -73.70959, "Los Lagos", "Fresia", "tierra", "piscicultura"],
-  ["Estero", -52.85621, -72.57773, "Magallanes", "Río Verde", "mar", "centro"],
-  ["Estero Conche", -44.42361, -72.78222, "Aysén", "Puerto Cisnes", "mar", "centro"],
-  ["Furia", -52.62306, -72.41056, "Magallanes", "Río Verde", "mar", "centro"],
-  ["Hueyusca", -40.92504, -73.56042, "Los Lagos", "Purranque", "tierra", "piscicultura"],
-  ["Imelev", -42.61528, -73.41472, "Los Lagos", "Achao", "mar", "centro"],
-  ["Isla García", -52.83816, -72.53191, "Magallanes", "Río Verde", "mar", "centro"],
-  ["Isla Tac", -42.40143, -73.15192, "Los Lagos", "Quemchi", "mar", "centro"],
-  ["Jacaff", -44.30444, -72.94333, "Aysén", "Puerto Cisnes", "mar", "centro"],
-  ["Linguar", -42.05881, -72.62749, "Los Lagos", "Hornopirén", "mar", "centro"],
-  ["Linlinao", -42.56917, -73.74806, "Los Lagos", "Chonchi", "mar", "centro"],
-  ["Liquiñe", -39.69421, -71.88259, "Los Ríos", "Panguipulli", "tierra", "piscicultura"],
-  ["Llancacheo", -41.74914, -73.03428, "Los Lagos", "Calbuco", "mar", "centro"],
-  ["Luchin", -45.04851, -73.40206, "Aysén", "Puerto Aguirre", "mar", "centro"],
-  ["Macetero", -44.44694, -72.81222, "Aysén", "Puerto Cisnes", "mar", "centro"],
-  ["Malomacum", -42.04795, -72.62711, "Los Lagos", "Hornopirén", "mar", "centro"],
-  ["Matilde", -45.48421, -74.20692, "Aysén", "Puerto Chacabuco", "mar", "centro"],
-  ["Navarro", -52.89667, -72.7097, "Magallanes", "Río Verde", "mar", "centro"],
-  ["PCC", -41.77938, -73.52419, "Los Lagos", "Calbuco", "mar", "piscicultura"],
-  ["Pollollo", -41.80652, -73.00925, "Los Lagos", "Calbuco", "mar", "centro"],
-  ["Punta Gruesa", -42.21001, -72.64493, "Los Lagos", "Hornopirén", "mar", "centro"],
-  ["Punta Isla", -52.7713, -72.36162, "Magallanes", "Río Verde", "mar", "centro"],
-  ["Punta Laura", -52.66806, -72.42111, "Magallanes", "Río Verde", "mar", "centro"],
-  ["Punta Laura Norte", -52.64694, -72.40667, "Magallanes", "Río Verde", "mar", "centro"],
-  ["Punta Victoria", -45.34944, -73.46667, "Aysén", "Puerto Chacabuco", "mar", "centro"],
-  ["Punta Yoye", -42.86639, -73.67944, "Los Lagos", "Quellón", "mar", "centro"],
-  ["Quilen", -42.9875, -73.54278, "Los Lagos", "Quellón", "mar", "centro"],
-  ["Rahue", -40.76553, -72.93064, "Los Lagos", "Osorno", "tierra", "piscicultura"],
-  ["Reñihue", -42.52386, -72.66882, "Los Lagos", "Hornopirén", "mar", "centro"],
-  ["Santa Juana", -40.7587, -72.96925, "Los Lagos", "Osorno", "tierra", "piscicultura"],
-  ["Sector 3", -42.46222, -73.25611, "Aysén", "Puerto Cisnes", "mar", "centro"],
-  ["Sur Este", -41.77959, -73.01941, "Los Lagos", "Calbuco", "mar", "centro"],
-  ["Teupa", -42.67972, -73.66972, "Los Lagos", "Chonchi", "mar", "centro"],
-  ["Trafún", -40.46944, -72.90497, "Los Lagos", "San Pablo", "tierra", "piscicultura"],
-  ["Tranqui I", -42.99806, -73.43583, "Los Lagos", "Quellón", "mar", "centro"],
-  ["Tranqui II", -43.00278, -73.39444, "Los Lagos", "Quellón", "mar", "centro"],
-  ["Transito", -44.8375, -73.60889, "Aysén", "Puerto Cisnes", "mar", "centro"],
-  ["Tubildad", -42.12528, -73.46944, "Los Lagos", "Quemchi", "mar", "centro"],
-  ["Unicornio", -52.62889, -72.3725, "Magallanes", "Río Verde", "mar", "centro"],
-  ["Unicornio Sur", -52.63528, -72.39417, "Magallanes", "Río Verde", "mar", "centro"],
-  ["Vilupulli", -42.60111, -73.77528, "Los Lagos", "Chonchi", "mar", "centro"],
-  ["Voigue", -42.30072, -73.20496, "Los Lagos", "Quemchi", "mar", "centro"],
-  ["Weste Isla Luz", -45.48806, -74.09333, "Aysén", "Puerto Chacabuco", "mar", "centro"],
-  ["Yelcho", -43.21472, -73.58028, "Los Lagos", "Quellón", "mar", "centro"],
-  ["Zañartu", -44.4125, -72.79306, "Aysén", "Puerto Cisnes", "mar", "centro"],
+  ["Abtao", -41.79944, -73.36083, "Los Lagos", "Calbuco"],
+  ["Acopio Chinquihue", -41.51607, -73.02722, "Los Lagos", "Puerto Montt"],
+  ["Acopio Quemchi", -42.1475, -73.48111, "Los Lagos", "Quemchi"],
+  ["Aguantao", -42.52, -73.58583, "Los Lagos", "Castro"],
+  ["Aldunate", -44.3275, -72.89833, "Aysén", "Puerto Cisnes"],
+  ["Aulen", -41.85068, -72.81142, "Los Lagos", "Hornopirén"],
+  ["Bertrand", -52.81687, -72.43779, "Magallanes", "Río Verde"],
+  ["Buill", -42.43716, -72.70246, "Los Lagos", "Hornopirén"],
+  ["Cachihue", -42.30047, -73.0669, "Los Lagos", "Quemchi"],
+  ["Calen 1", -42.33139, -73.44444, "Los Lagos", "Quemchi"],
+  ["Calen 2", -42.3475, -73.47889, "Los Lagos", "Quemchi"],
+  ["Caleta Soledad", -42.36444, -72.48806, "Los Lagos", "Hornopirén"],
+  ["Canal Contreras", -52.775, -72.59722, "Magallanes", "Río Verde"],
+  ["Caniglia 2", -45.41667, -74.07056, "Aysén", "Puerto Chacabuco"],
+  ["Caucahue", -42.11222, -73.425, "Los Lagos", "Quemchi"],
+  ["Chauco", -42.925, -73.59333, "Los Lagos", "Quellón"],
+  ["Chaullin Norte", -43.03417, -73.44694, "Los Lagos", "Quellón"],
+  ["Chaullin Sur", -43.0975, -73.41639, "Los Lagos", "Quellón"],
+  ["Chaullin Weste", -43.05667, -73.46028, "Los Lagos", "Quellón"],
+  ["Chidhuapi 1", -41.81556, -73.11667, "Los Lagos", "Calbuco"],
+  ["Chidhuapi 2", -41.85389, -73.08417, "Los Lagos", "Calbuco"],
+  ["Chidhuapi 3", -41.85278, -73.05306, "Los Lagos", "Calbuco"],
+  ["Chidhuapi 4", -41.83111, -73.11306, "Los Lagos", "Calbuco"],
+  ["Chope", -41.79667, -73.10806, "Los Lagos", "Calbuco"],
+  ["Churrecue", -45.35667, -73.54111, "Aysén", "Puerto Chacabuco"],
+  ["Colaco 4", -41.77333, -73.35194, "Los Lagos", "Calbuco"],
+  ["Darsena", -52.58833, -72.36444, "Magallanes", "Río Verde"],
+  ["Darsena Norte", -52.58842, -72.36446, "Magallanes", "Río Verde"],
+  ["Desembocadura", -52.73809, -72.63738, "Magallanes", "Río Verde"],
+  ["Ducañas", -42.25232, -73.17865, "Los Lagos", "Quemchi"],
+  ["El Manzano", -42.02544, -72.65009, "Los Lagos", "Hornopirén"],
+  ["Ensenada Rys", -52.56111, -72.34194, "Magallanes", "Río Verde"],
+  ["Estero", -52.85621, -72.57773, "Magallanes", "Río Verde"],
+  ["Estero Conche", -44.42361, -72.78222, "Aysén", "Puerto Cisnes"],
+  ["Furia", -52.62306, -72.41056, "Magallanes", "Río Verde"],
+  ["Imelev", -42.61528, -73.41472, "Los Lagos", "Achao"],
+  ["Isla García", -52.83816, -72.53191, "Magallanes", "Río Verde"],
+  ["Isla Tac", -42.40143, -73.15192, "Los Lagos", "Quemchi"],
+  ["Jacaff", -44.30444, -72.94333, "Aysén", "Puerto Cisnes"],
+  ["Linguar", -42.05881, -72.62749, "Los Lagos", "Hornopirén"],
+  ["Linlinao", -42.56917, -73.74806, "Los Lagos", "Chonchi"],
+  ["Llancacheo", -41.74914, -73.03428, "Los Lagos", "Calbuco"],
+  ["Luchin", -45.04851, -73.40206, "Aysén", "Puerto Aguirre"],
+  ["Macetero", -44.44694, -72.81222, "Aysén", "Puerto Cisnes"],
+  ["Malomacum", -42.04795, -72.62711, "Los Lagos", "Hornopirén"],
+  ["Matilde", -45.48421, -74.20692, "Aysén", "Puerto Chacabuco"],
+  ["Navarro", -52.89667, -72.7097, "Magallanes", "Río Verde"],
+  ["Pollollo", -41.80652, -73.00925, "Los Lagos", "Calbuco"],
+  ["Punta Gruesa", -42.21001, -72.64493, "Los Lagos", "Hornopirén"],
+  ["Punta Isla", -52.7713, -72.36162, "Magallanes", "Río Verde"],
+  ["Punta Laura", -52.66806, -72.42111, "Magallanes", "Río Verde"],
+  ["Punta Laura Norte", -52.64694, -72.40667, "Magallanes", "Río Verde"],
+  ["Punta Victoria", -45.34944, -73.46667, "Aysén", "Puerto Chacabuco"],
+  ["Punta Yoye", -42.86639, -73.67944, "Los Lagos", "Quellón"],
+  ["Quilen", -42.9875, -73.54278, "Los Lagos", "Quellón"],
+  ["Reñihue", -42.52386, -72.66882, "Los Lagos", "Hornopirén"],
+  ["Sector 3", -42.46222, -73.25611, "Aysén", "Puerto Cisnes"],
+  ["Sur Este", -41.77959, -73.01941, "Los Lagos", "Calbuco"],
+  ["Teupa", -42.67972, -73.66972, "Los Lagos", "Chonchi"],
+  ["Tranqui I", -42.99806, -73.43583, "Los Lagos", "Quellón"],
+  ["Tranqui II", -43.00278, -73.39444, "Los Lagos", "Quellón"],
+  ["Transito", -44.8375, -73.60889, "Aysén", "Puerto Cisnes"],
+  ["Tubildad", -42.12528, -73.46944, "Los Lagos", "Quemchi"],
+  ["Unicornio", -52.62889, -72.3725, "Magallanes", "Río Verde"],
+  ["Unicornio Sur", -52.63528, -72.39417, "Magallanes", "Río Verde"],
+  ["Vilupulli", -42.60111, -73.77528, "Los Lagos", "Chonchi"],
+  ["Voigue", -42.30072, -73.20496, "Los Lagos", "Quemchi"],
+  ["Weste Isla Luz", -45.48806, -74.09333, "Aysén", "Puerto Chacabuco"],
+  ["Yelcho", -43.21472, -73.58028, "Los Lagos", "Quellón"],
+  ["Zañartu", -44.4125, -72.79306, "Aysén", "Puerto Cisnes"],
 ];
 
-const TODAS = REGIONES.flatMap(r => r.comunas.map(c => ({region:r.region, nombre:c[0], lat:c[1], lon:c[2], categoria:"mar", tipo:"centro"})))
-  .concat(PUNTOS_ESPECIFICOS.map(p => ({region:p[3], comuna:p[4], nombre:p[0], lat:p[1], lon:p[2], categoria:p[5], tipo:p[6], esPunto:true})));
+const TODAS = REGIONES.flatMap(r => r.comunas.map(c => ({region:r.region, nombre:c[0], lat:c[1], lon:c[2]})))
+  .concat(PUNTOS_ESPECIFICOS.map(p => ({region:p[3], comuna:p[4], nombre:p[0], lat:p[1], lon:p[2], esPunto:true})));
 
 // CAPITANÍA DE PUERTO real que corresponde a cada comuna (fuente: listado
 // oficial de Gobernaciones Marítimas de DIRECTEMAR). Solo las comunas con
@@ -376,7 +346,7 @@ function iconoClima(code){
 function esTormenta(code){ return [95,96,99].includes(code); }
 
 /* ---------- Evaluación de una comuna contra sus umbrales ---------- */
-function evaluar(nombre, d, region, categoria){
+function evaluar(nombre, d, region){
   const u = umbralDe(nombre, region);
   const viento  = d.viento_kmh;
   const rafaga  = d.rafagas_kmh;
@@ -388,8 +358,7 @@ function evaluar(nombre, d, region, categoria){
   const precip = d.precipitacion_24h_mm;
   const tmin   = d.tmin_dia_c;
   const tmax   = d.tmax_dia_c;
-  const ola    = categoria !== "tierra" ? (d.altura_ola_max_m ?? d.altura_ola_actual_m) : null;
-  const caudal = categoria === "tierra" ? (d.caudal_max_prevista_m3s ?? d.caudal_actual_m3s) : null;
+  const ola    = d.altura_ola_max_m ?? d.altura_ola_actual_m;
 
   // Próximas horas y mínima "hacia adelante": ya vienen calculadas por el
   // servidor (fetch_datos_consenso), no hace falta procesarlas acá.
@@ -416,13 +385,6 @@ function evaluar(nombre, d, region, categoria){
     motivos.push(`Oleaje ${ola.toFixed(1)} m`);
     coloresIndividuales.push(severidadProporcional(ola, u.ola));
   }
-  if (caudal != null) {
-    const umbralesRio = UMBRAL_CAUDAL_POR_PUNTO[nombre];
-    if (umbralesRio && caudal >= umbralesRio.amarilla) {
-      motivos.push(`Caudal ${caudal.toFixed(1)} m³/s`);
-      coloresIndividuales.push(severidadCaudal(caudal, umbralesRio));
-    }
-  }
   if (tminPrevista != null && tminPrevista <= u.tempMin) {
     motivos.push(`Mínima pronosticada ${Math.round(tminPrevista)}°C`);
     coloresIndividuales.push(severidadHelada(tminPrevista, region));
@@ -435,7 +397,7 @@ function evaluar(nombre, d, region, categoria){
   const estado = colorFinal(coloresIndividuales);
 
   return { estado, motivos, tempActual, viento, rafaga, humedad, sensacion, precip, tmin, tmax, direccionViento,
-           codigoActual, proximasHoras, ola, caudal };
+           codigoActual, proximasHoras, ola };
 }
 
 /* ---------- SENAPRED oficial: tres capas públicas, una por color ---------- */
@@ -505,7 +467,7 @@ async function cargar(){
     // lluvia, helada, oleaje), no por alertas oficiales de la región/comuna.
     TODAS.forEach((c) => {
       const d = datos[c.nombre] || {};
-      c.eval = evaluar(c.nombre, d, c.region, c.categoria);
+      c.eval = evaluar(c.nombre, d, c.region);
       c.oficial = null;
     });
 
@@ -596,7 +558,7 @@ function render(){
       html += `<div class="card ${est}">
         <div class="top">
           <span class="wx-icon">${iconoClima(ev.codigoActual)}</span>
-          <span class="name">${c.nombre}${c.esPunto ? ` <span style="color:var(--muted);font-weight:400;font-size:11px">· ${c.tipo}</span>` : ''}${ev.tempActual!=null ? ` <span style="color:var(--ink);font-weight:400;">🌡️ ${Math.round(ev.tempActual)}°C</span>` : ''}</span>
+          <span class="name">${c.nombre}${c.esPunto ? ' <span style="color:var(--muted);font-weight:400;font-size:11px">· centro</span>' : ''}${ev.tempActual!=null ? ` <span style="color:var(--ink);font-weight:400;">🌡️ ${Math.round(ev.tempActual)}°C</span>` : ''}</span>
           ${badge}
         </div>
         ${c.comuna ? `<div style="font-size:11px;color:var(--muted);margin-top:-2px;">${c.comuna}, ${c.region}</div>` : ''}
@@ -610,7 +572,7 @@ function render(){
           <div class="mcell"><div class="lbl">Lluvia</div><div class="val">${fmt(ev.precip,"mm")}</div></div>
           <div class="mcell"><div class="lbl">Mín</div><div class="val">${fmt(ev.tmin,"°C")}</div></div>
           <div class="mcell"><div class="lbl">Máx</div><div class="val">${fmt(ev.tmax,"°C")}</div></div>
-          <div class="mcell"><div class="lbl">${c.categoria==="tierra"?"Caudal":"Oleaje"}</div><div class="val">${c.categoria==="tierra" ? (ev.caudal!=null?ev.caudal.toFixed(1)+" m³/s":"—") : (ev.ola!=null?ev.ola.toFixed(1)+" m":"—")}</div></div>
+          <div class="mcell"><div class="lbl">Oleaje</div><div class="val">${ev.ola!=null?ev.ola.toFixed(1)+" m":"—"}</div></div>
         </div>
       </div>`;
     }
