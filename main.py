@@ -17,7 +17,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from config import REGIONES, PUNTOS_ESPECIFICOS, obtener_umbrales_punto
+from config import REGIONES, PUNTOS_ESPECIFICOS, obtener_umbrales_punto, obtener_umbral_caudal
 from fuentes import fetch_datos_consenso, fetch_alertas_senapred
 from reglas import evaluar_umbrales, formatear_alertas_oficiales
 from reporte import generar_asunto, generar_cuerpo_texto, generar_cuerpo_html
@@ -92,11 +92,13 @@ def _evaluar_punto(punto: tuple, horas_viento: int) -> list[dict]:
     próximo envío (`horas_viento`), no el dato del instante — así el
     reporte no se pierde un pico de viento entre un correo y el siguiente.
     """
-    nombre, lat, lon, comuna_ref, region = punto
+    nombre, lat, lon, comuna_ref, region, categoria, tipo = punto
     try:
-        datos = fetch_datos_consenso(lat, lon, horas_viento)
+        datos = fetch_datos_consenso(lat, lon, horas_viento, categoria=categoria)
         umbrales = obtener_umbrales_punto(nombre)
-        return evaluar_umbrales(nombre, datos, umbrales, region, usar_pronostico_viento=True)
+        return evaluar_umbrales(nombre, datos, umbrales, region, categoria=categoria,
+                                 umbral_caudal=obtener_umbral_caudal(nombre),
+                                 usar_pronostico_viento=True)
     except Exception:
         log.exception("Error obteniendo datos de Open-Meteo para %s", nombre)
         return []
