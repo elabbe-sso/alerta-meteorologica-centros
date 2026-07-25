@@ -103,7 +103,12 @@ HELADA_ESCALA = {
 # acá, ese punto no genera ninguna alerta de caudal (aunque sí las demás:
 # viento, ráfaga, lluvia, helada, tormenta).
 UMBRALES_CAUDAL_POR_PUNTO = {
-    # "Nombre del punto": {"amarilla": <m³/s>, "naranja": <m³/s>, "roja": <m³/s>},
+    "Liquiñe": {"amarilla": 20, "naranja": 30, "roja": 40},
+    "Trafún": {"amarilla": 130, "naranja": 200, "roja": 300},
+    "Hueyusca": {"amarilla": 3, "naranja": 4.5, "roja": 7},
+    "Esperanza": {"amarilla": 15, "naranja": 25, "roja": 40},
+    "Rahue": {"amarilla": 150, "naranja": 250, "roja": 320},
+    "Santa Juana": {"amarilla": 150, "naranja": 250, "roja": 320},
 }
 
 
