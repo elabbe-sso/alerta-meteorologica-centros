@@ -40,6 +40,7 @@ from fuentes import (
     fetch_datos_open_meteo_batch,
     fetch_datos_open_meteo_icon_batch,
     fetch_datos_marino_batch,
+    fetch_datos_caudal_batch,
     fetch_datos_yr,
     _combinar_fuentes,
 )
@@ -78,11 +79,30 @@ def _refrescar_cache() -> None:
         print(f"[api.py] fetch_datos_open_meteo_icon_batch falló: {e}")
         icon_lote = [None] * len(puntos_coords)
 
+    # Oleaje (mar) y caudal (tierra) van a fuentes distintas -- se separan
+    # los puntos por categoría para no pedirle oleaje a un río ni caudal a
+    # un centro marino.
+    indices_mar = [i for i, p in enumerate(PUNTOS_ESPECIFICOS) if p[5] != "tierra"]
+    indices_tierra = [i for i, p in enumerate(PUNTOS_ESPECIFICOS) if p[5] == "tierra"]
+    coords_mar = [puntos_coords[i] for i in indices_mar]
+    coords_tierra = [puntos_coords[i] for i in indices_tierra]
+
+    marino_lote: list = [None] * len(puntos_coords)
     try:
-        marino_lote = fetch_datos_marino_batch(puntos_coords)
+        parcial = fetch_datos_marino_batch(coords_mar)
+        for idx, valor in zip(indices_mar, parcial):
+            marino_lote[idx] = valor
     except Exception as e:
         print(f"[api.py] fetch_datos_marino_batch falló: {e}")
-        marino_lote = [None] * len(puntos_coords)
+
+    caudal_lote: list = [None] * len(puntos_coords)
+    if coords_tierra:
+        try:
+            parcial = fetch_datos_caudal_batch(coords_tierra)
+            for idx, valor in zip(indices_tierra, parcial):
+                caudal_lote[idx] = valor
+        except Exception as e:
+            print(f"[api.py] fetch_datos_caudal_batch falló: {e}")
 
     # yr.no: host distinto (api.met.no), no está implicado en el límite de
     # Open-Meteo -- se mantiene por punto, en paralelo para no demorar.
@@ -101,17 +121,22 @@ def _refrescar_cache() -> None:
             yr_lote[idx] = datos_yr
 
     sin_ola = {"altura_ola_actual_m": None, "altura_ola_max_m": None}
+    sin_caudal = {"caudal_actual_m3s": None, "caudal_max_prevista_m3s": None}
     datos_previos = _cache["datos"]  # lo que ya había guardado, por si este refresco falla
 
     resultado: dict = {}
     for i, punto in enumerate(PUNTOS_ESPECIFICOS):
-        nombre, lat, lon, comuna, region = punto
+        nombre, lat, lon, comuna, region, categoria, tipo = punto
         fuentes_punto = [d for d in (om_lote[i], yr_lote[i], icon_lote[i]) if d]
         try:
             datos = _combinar_fuentes(fuentes_punto)
-            datos.update(marino_lote[i] or sin_ola)
+            if categoria == "tierra":
+                datos.update(caudal_lote[i] or sin_caudal)
+            else:
+                datos.update(marino_lote[i] or sin_ola)
             datos["comuna"] = comuna
             datos["region"] = region
+            datos["categoria"] = categoria
             datos["lat"] = lat
             datos["lon"] = lon
             resultado[nombre] = datos
