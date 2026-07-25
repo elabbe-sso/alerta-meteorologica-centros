@@ -38,7 +38,6 @@ from flask import Flask, jsonify
 from config import PUNTOS_ESPECIFICOS
 from fuentes import (
     fetch_datos_open_meteo_batch,
-    fetch_datos_open_meteo_icon_batch,
     fetch_datos_marino_batch,
     fetch_datos_caudal_batch,
     fetch_datos_yr,
@@ -63,21 +62,22 @@ _cache: dict = {"datos": {}, "actualizado_en": 0.0}
 def _refrescar_cache() -> None:
     puntos_coords = [(p[1], p[2]) for p in PUNTOS_ESPECIFICOS]  # [(lat, lon), ...]
 
-    # Solo 3 llamadas HTTP en total para los 68 puntos (Open-Meteo base,
-    # DWD ICON, Marine) -- en vez de 68 x 3 = 204. Si una fuente completa
-    # falla, se sigue con las demás (mismo espíritu que antes, ahora a
-    # nivel de lote en vez de punto por punto).
+    # 2 llamadas a Open-Meteo (base + oleaje/caudal) para todos los puntos,
+    # en vez de una por punto. Si una fuente completa falla, se sigue con
+    # las demás.
+    #
+    # DWD ICON se sacó a propósito: repetía casi el mismo pedido completo
+    # (77 ubicaciones x 6 variables horarias x 48 horas) solo para aportar
+    # el peor caso de viento/ráfaga entre modelos, y era cerca de la mitad
+    # del peso total que Open-Meteo nos cobra. Con los 429 constantes por la
+    # IP compartida de Render, ese costo dejó de justificarse: el viento
+    # sigue saliendo del consenso entre Open-Meteo y yr.no (dos modelos),
+    # solo un poco menos conservador en los picos.
     try:
         om_lote = fetch_datos_open_meteo_batch(puntos_coords, horas_viento=12)
     except Exception as e:
         print(f"[api.py] fetch_datos_open_meteo_batch falló: {e}")
         om_lote = [None] * len(puntos_coords)
-
-    try:
-        icon_lote = fetch_datos_open_meteo_icon_batch(puntos_coords, horas_viento=12)
-    except Exception as e:
-        print(f"[api.py] fetch_datos_open_meteo_icon_batch falló: {e}")
-        icon_lote = [None] * len(puntos_coords)
 
     # Oleaje (mar) y caudal (tierra) van a fuentes distintas -- se separan
     # los puntos por categoría para no pedirle oleaje a un río ni caudal a
@@ -127,7 +127,7 @@ def _refrescar_cache() -> None:
     resultado: dict = {}
     for i, punto in enumerate(PUNTOS_ESPECIFICOS):
         nombre, lat, lon, comuna, region, categoria, tipo = punto
-        fuentes_punto = [d for d in (om_lote[i], yr_lote[i], icon_lote[i]) if d]
+        fuentes_punto = [d for d in (om_lote[i], yr_lote[i]) if d]
         try:
             datos = _combinar_fuentes(fuentes_punto)
             if categoria == "tierra":
