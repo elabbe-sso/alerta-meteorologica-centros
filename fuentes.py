@@ -419,6 +419,7 @@ def fetch_datos_open_meteo_icon_batch(puntos: list[tuple[float, float]], horas_v
 # "más confianza" en el viento/lluvia que ya se mide.
 # ======================================================================
 MARINE_URL = "https://marine-api.open-meteo.com/v1/marine"
+FLOOD_URL = "https://flood-api.open-meteo.com/v1/flood"
 
 
 def _parsear_respuesta_marino(data: dict) -> dict:
@@ -468,6 +469,58 @@ def fetch_datos_marino_batch(puntos: list[tuple[float, float]]) -> list[dict]:
         (_parsear_respuesta_marino(d) if d else {"altura_ola_actual_m": None, "altura_ola_max_m": None})
         for d in data
     ]
+
+
+def _parsear_respuesta_caudal(data: dict) -> dict:
+    diario = data.get("daily", {})
+    valores = diario.get("river_discharge", [])
+    caudal_hoy = valores[0] if valores else None
+    caudal_max_prevista = max((v for v in valores if v is not None), default=None)
+    return {
+        "caudal_actual_m3s": caudal_hoy,
+        "caudal_max_prevista_m3s": caudal_max_prevista,
+    }
+
+
+_PARAMS_CAUDAL = {
+    "daily": "river_discharge",
+    "forecast_days": 3,
+}
+_SIN_CAUDAL = {"caudal_actual_m3s": None, "caudal_max_prevista_m3s": None}
+
+
+def fetch_datos_caudal(lat: float, lon: float) -> dict:
+    """
+    Caudal del río más grande en un radio de 5 km del punto (Open-Meteo
+    Flood API, datos GloFAS). Solo aplica a instalaciones en TIERRA
+    (categoria="tierra" en config.py) -- un centro marino no tiene río.
+
+    Nota de precisión: por la resolución de 5 km, el río más cercano
+    puede no ser el correcto si hay varios cerca. Si el caudal se ve
+    raro para un punto nuevo, prueba variando la coordenada ~0.1° (ver
+    docs de Open-Meteo Flood API).
+    """
+    params = {"latitude": lat, "longitude": lon, **_PARAMS_CAUDAL}
+    resp = requests.get(FLOOD_URL, params=params, timeout=15)
+    resp.raise_for_status()
+    return _parsear_respuesta_caudal(resp.json())
+
+
+def fetch_datos_caudal_batch(puntos: list[tuple[float, float]]) -> list[dict]:
+    """Igual que `fetch_datos_caudal`, pero para VARIOS puntos en UNA sola
+    llamada HTTP."""
+    if not puntos:
+        return []
+    params = {
+        "latitude": ",".join(str(p[0]) for p in puntos),
+        "longitude": ",".join(str(p[1]) for p in puntos),
+        **_PARAMS_CAUDAL,
+    }
+    resp = _get_con_reintento(FLOOD_URL, params, timeout=30)
+    data = resp.json()
+    if not isinstance(data, list):
+        data = [data]
+    return [(_parsear_respuesta_caudal(d) if d else dict(_SIN_CAUDAL)) for d in data]
 
 
 # ======================================================================
@@ -530,11 +583,15 @@ def _combinar_fuentes(fuentes_datos: list[dict]) -> dict:
     return resultado
 
 
-def fetch_datos_consenso(lat: float, lon: float, horas_viento: int = 12) -> dict:
+def fetch_datos_consenso(lat: float, lon: float, horas_viento: int = 12, categoria: str = "mar") -> dict:
     """
     `horas_viento`: ventana (en horas hacia adelante) para el PEOR viento y
     ráfaga previstos. Por defecto 12h; main.py pasa la cantidad real de
     horas hasta el próximo envío programado (ver HORAS_ENVIO).
+
+    `categoria`: "mar" (default) agrega datos de oleaje; "tierra" agrega
+    caudal de río en su lugar -- un centro marino no tiene río, y una
+    instalación en tierra no tiene oleaje.
 
     Para MUCHOS puntos a la vez (ej. los 68 centros en api.py), NO uses
     esta función en un loop -- usa las versiones _batch de cada fuente en
@@ -555,13 +612,20 @@ def fetch_datos_consenso(lat: float, lon: float, horas_viento: int = 12) -> dict
 
     resultado = _combinar_fuentes(fuentes_datos)
 
-    # Datos marinos: fuente separada, se agregan aparte (no hay "peor caso"
-    # entre modelos acá todavía, solo Open-Meteo Marine).
-    try:
-        resultado.update(fetch_datos_marino(lat, lon))
-    except Exception:
-        resultado["altura_ola_actual_m"] = None
-        resultado["altura_ola_max_m"] = None
+    # Oleaje (mar) o caudal de río (tierra): fuentes separadas, se agregan
+    # aparte (no hay "peor caso" entre modelos acá todavía, solo un modelo
+    # por variable).
+    if categoria == "tierra":
+        try:
+            resultado.update(fetch_datos_caudal(lat, lon))
+        except Exception:
+            resultado.update(_SIN_CAUDAL)
+    else:
+        try:
+            resultado.update(fetch_datos_marino(lat, lon))
+        except Exception:
+            resultado["altura_ola_actual_m"] = None
+            resultado["altura_ola_max_m"] = None
 
     return resultado
 
