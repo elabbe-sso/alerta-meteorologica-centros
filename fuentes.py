@@ -34,6 +34,7 @@ from __future__ import annotations
 import requests
 import time
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 
 # ======================================================================
@@ -67,6 +68,20 @@ def _get_con_reintento(url: str, params: dict, timeout: int, intentos: int = 3):
     ultimo_error.raise_for_status()  # ya no quedan reintentos: deja que falle normal
 
 
+def _ahora_chile() -> datetime:
+    """
+    Hora local de Chile, sin zona horaria pegada.
+
+    Open-Meteo devuelve las horas etiquetadas en America/Santiago (se lo
+    pedimos con el parámetro `timezone`), pero el servidor de Render corre
+    en UTC. Usar `datetime.now()` pelado comparaba la hora del servidor
+    contra horas de Chile y quedaba 3 o 4 horas adelantado según la época
+    del año -- la franja de próximas horas partía tarde, y las ventanas de
+    helada, viento y tormenta miraban un tramo corrido hacia adelante.
+    """
+    return datetime.now(ZoneInfo("America/Santiago")).replace(tzinfo=None)
+
+
 def _extremo_prevista(horas_iso: list[str], valores: list, horas_ventana: int, agregador) -> float | None:
     """
     Aplica `agregador` (min o max) SOLO entre las horas que faltan (desde
@@ -78,7 +93,7 @@ def _extremo_prevista(horas_iso: list[str], valores: list, horas_ventana: int, a
     """
     if not horas_iso or not valores:
         return None
-    ahora = datetime.now()
+    ahora = _ahora_chile()
     idx = next((i for i, h in enumerate(horas_iso) if datetime.fromisoformat(h) >= ahora), None)
     if idx is None:
         return None
@@ -109,7 +124,7 @@ def _parsear_respuesta_open_meteo(data: dict, horas_viento: int) -> dict:
     # Últimas 24h reales (desde "ahora" hacia atrás) — ya no es simplemente
     # "los últimos 24 del arreglo", porque con forecast_days=2 el arreglo
     # incluye también el día de mañana.
-    ahora = datetime.now()
+    ahora = _ahora_chile()
     idx_ahora = next((i for i, h in enumerate(horas) if datetime.fromisoformat(h) >= ahora), len(horas))
     ini = max(0, idx_ahora - 24)
     precip_24h = sum(v for v in hourly.get("precipitation", [])[ini:idx_ahora] if v is not None)
@@ -334,7 +349,7 @@ def _parsear_respuesta_icon(data: dict) -> dict:
     hourly = data.get("hourly", {})
     horas = hourly.get("time", [])
 
-    ahora = datetime.now()
+    ahora = _ahora_chile()
     idx_ahora = next((i for i, h in enumerate(horas) if datetime.fromisoformat(h) >= ahora), len(horas))
     ini = max(0, idx_ahora - 24)
     precip_24h = sum(v for v in hourly.get("precipitation", [])[ini:idx_ahora] if v is not None)
