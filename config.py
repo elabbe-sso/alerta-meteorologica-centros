@@ -141,6 +141,7 @@ PUNTOS_ESPECIFICOS = [
     ("Furia", -52.62306, -72.41056, "Río Verde", "Magallanes"),
     ("Imelev", -42.61528, -73.41472, "Achao", "Los Lagos"),
     ("Isla García", -52.83816, -72.53191, "Río Verde", "Magallanes"),
+    ("Isla Juan", -52.57577, -72.09981, "Río Verde", "Magallanes"),
     ("Isla Tac", -42.40143, -73.15192, "Quemchi", "Los Lagos"),
     ("Jacaff", -44.30444, -72.94333, "Puerto Cisnes", "Aysén"),
     ("Linguar", -42.05881, -72.62749, "Hornopirén", "Los Lagos"),
