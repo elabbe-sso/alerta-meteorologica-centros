@@ -110,6 +110,23 @@ HORAS_VENTANA_TORMENTA = 6
 CODIGOS_TORMENTA = {95, 96, 99}
 
 
+def _indice_dia_actual(daily: dict, ahora: datetime) -> int:
+    """
+    Posición de HOY dentro del arreglo diario de Open-Meteo.
+
+    Como pedimos `past_days=1`, ese arreglo parte en AYER: [ayer, hoy,
+    mañana]. Tomar siempre la posición 0 mostraba la mínima y máxima del
+    día anterior, y por eso podía verse una "máxima" más baja que la
+    temperatura actual. Se busca por fecha en vez de asumir la posición,
+    para que siga funcionando si algún día cambian `past_days`.
+    """
+    fechas = daily.get("time") or []
+    hoy = ahora.date().isoformat()
+    if hoy in fechas:
+        return fechas.index(hoy)
+    return min(1, len(fechas) - 1) if fechas else 0
+
+
 def _parsear_respuesta_open_meteo(data: dict, horas_viento: int) -> dict:
     """
     Parsea la respuesta de UNA ubicación de la API base de Open-Meteo
@@ -155,8 +172,8 @@ def _parsear_respuesta_open_meteo(data: dict, horas_viento: int) -> dict:
         "sensacion_c": current.get("apparent_temperature"),
         "direccion_viento": current.get("wind_direction_10m"),
         "codigo_actual": current.get("weather_code"),
-        "tmin_dia_c": (daily.get("temperature_2m_min") or [None])[0],
-        "tmax_dia_c": (daily.get("temperature_2m_max") or [None])[0],
+        "tmin_dia_c": (daily.get("temperature_2m_min") or [None])[_indice_dia_actual(daily, ahora)] if daily.get("temperature_2m_min") else None,
+        "tmax_dia_c": (daily.get("temperature_2m_max") or [None])[_indice_dia_actual(daily, ahora)] if daily.get("temperature_2m_max") else None,
         "proximas_horas": proximas_horas,
         "temp_min_prevista_c": _extremo_prevista(horas, hourly.get("temperature_2m", []), HORAS_VENTANA_HELADA, min),
         "viento_kmh": current.get("wind_speed_10m"),
