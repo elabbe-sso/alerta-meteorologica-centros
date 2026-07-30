@@ -161,7 +161,7 @@ PUNTOS_ESPECIFICOS = [
     ("Punta Yoye", -42.86639, -73.67944, "Quellón", "Los Lagos"),
     ("Quilen", -42.9875, -73.54278, "Quellón", "Los Lagos"),
     ("Reñihue", -42.52386, -72.66882, "Hornopirén", "Los Lagos"),
-    ("Sector 3", -42.46222, -73.25611, "Puerto Cisnes", "Aysén"),
+    ("Sector 3", -44.40028, -72.83904, "Puerto Cisnes", "Aysén"),
     ("Sur Este", -41.77959, -73.01941, "Calbuco", "Los Lagos"),
     ("Teupa", -42.67972, -73.66972, "Chonchi", "Los Lagos"),
     ("Tranqui I", -42.99806, -73.43583, "Quellón", "Los Lagos"),
